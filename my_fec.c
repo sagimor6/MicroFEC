@@ -3,7 +3,22 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/types.h>
+//#include <sys/types.h>
+#include <stdio.h>
+
+#define TRACE(fmt, ...) do { printf(fmt, ##__VA_ARGS__); } while(false)
+
+#define VEC_TRACE(vec, num) \
+{ \
+    uint __i = 0;\
+    TRACE("%s:", #vec);\
+    for(__i = 0; __i < (num); __i++) {\
+        TRACE(" %d", (vec)[__i]);\
+    }\
+    TRACE("\n");\
+}
+
+#define CHECK(cond) if(!(cond)) { TRACE("check failed %d %s\n", __LINE__, #cond); }
 
 typedef uint16_t fec_int_t;
 
@@ -38,12 +53,12 @@ typedef struct {
     fec_int_t num_redundant;
 
     fec_int_t *missing_y; // size = k
-    fec_int_t *present_x; // size = k
+    fec_int_t *present_x; // size = k - 1
     bool missing_1s;
 
-    fec_int_t *pi_xx; // size = k
+    fec_int_t *pi_xx; // size = k - 1
     fec_int_t *pi_yy; // size = k
-    fec_int_t *pi_xy; // size = k
+    fec_int_t *pi_xy; // size = k - 1
     fec_int_t *pi_yx; // size = k
 
     fec_int_t *present_y; // size = n - k
@@ -54,8 +69,7 @@ typedef struct {
 
     // TODO: can replace with inplace in packet mem
     fec_int_t *tmp_vec_info; // size = n - k
-    fec_int_t tmp_vec_1s;
-    fec_int_t *tmp_vec_redundancy; // size = k
+    fec_int_t *tmp_vec_redundancy; // size = k - 1
 
     fec_int_t *tmp_recovered_ints; // size = k
     
@@ -113,17 +127,25 @@ fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
 }
 
 fec_int_t poly_inv(fec_int_t a) {
-    return poly_pow(a, (fec_int_t)-2);
+    fec_int_t res = poly_pow(a, (fec_int_t)-2);
+    CHECK(poly_mul(a, res) == 1);
+    return res;
+}
+
+static inline fec_int_t _fec_inv(const fec_state_t *state, fec_int_t a) {
+    return state->inv_arr[a - 1];
 }
 
 bool fec_init(fec_state_t *state, fec_int_t n, fec_int_t k, size_t pak_len) {
     state->n = n;
     state->k = k;
+    state->pak_len = pak_len;
 
     // TODO: int overflows everywhere
 
     if (n + k - 1 > 0) {
         size_t arr_size = (1 << log2_ceil(n + k - 1)) - 1;
+        TRACE("arr size=%lu\n", arr_size);
         state->inv_arr = malloc(sizeof(fec_int_t) * arr_size);
         if (state->inv_arr == NULL) {
             return false;
@@ -158,6 +180,23 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
         return false;
     }
 
+    rx_state->redundancy_paks = calloc(state->k, sizeof(rx_state->redundancy_paks[0]));
+
+    rx_state->tmp_vec_redundancy = malloc(sizeof(rx_state->tmp_vec_redundancy[0]) * (state->k - 1));
+    rx_state->missing_y = malloc(sizeof(rx_state->missing_y[0]) * state->k);
+    rx_state->present_x = malloc(sizeof(rx_state->present_x[0]) * (state->k - 1));
+    rx_state->pi_xx = malloc(sizeof(rx_state->pi_xx[0]) * (state->k - 1));
+    rx_state->pi_xy = malloc(sizeof(rx_state->pi_xy[0]) * (state->k - 1));
+    rx_state->pi_yx = malloc(sizeof(rx_state->pi_yx[0]) * state->k);
+    rx_state->pi_yy = malloc(sizeof(rx_state->pi_yy[0]) * state->k);
+    rx_state->tmp_recovered_ints = malloc(sizeof(rx_state->tmp_recovered_ints[0]) * state->k);
+    rx_state->tmp_vec_info = malloc(sizeof(rx_state->tmp_vec_info[0]) * (state->n - state->k));
+    rx_state->present_y = malloc(sizeof(rx_state->present_y[0]) * (state->n - state->k));
+    rx_state->pi_ycomp_x = malloc(sizeof(rx_state->pi_ycomp_x[0]) * (state->n - state->k));
+    rx_state->pi_ycomp_y = malloc(sizeof(rx_state->pi_ycomp_y[0]) * (state->n - state->k));
+
+    rx_state->num_info = 0;
+    rx_state->num_redundant = 0;
     return true;
 }
 
@@ -230,12 +269,29 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
     size_t pak_len = state->pak_len;
 
     fec_int_t num_y_missing = n - rx_state->num_info;
-    fec_int_t num_x_present = rx_state->num_redundant;
+    bool has_one_row;
+    fec_int_t num_x_present = 0;
 
     fec_int_t i, j;
     fec_int_t idx_i, idx_j;
     fec_int_t x_i, y_i, y_j, x_j;
     size_t ii;
+
+    if (rx_state->num_redundant < num_y_missing) {
+        return false;
+    }
+
+    if (num_y_missing == 0) {
+        return true;
+    }
+
+    has_one_row = rx_state->redundancy_paks[0] != NULL;
+    if (num_y_missing >= has_one_row) {
+        num_x_present = num_y_missing - has_one_row;
+    }
+
+    TRACE("has_one_row=%d\n", has_one_row);
+    TRACE("num_x_present=%d\n", num_x_present);
 
     for (y_i = 0, i = 0, j = 0; y_i < n; y_i++) {
         if (rx_state->info_paks[y_i] != NULL) {
@@ -259,31 +315,31 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
 
 
 
-    for (i = 0, idx_i = 0, idx_j = 0; i < k - 1; i++) {
-        if (rx_state->redundancy_paks[i+1] != NULL) {
-            continue;
-        }
+    // for (i = 0, idx_i = 0, idx_j = 0; i < k - 1; i++) {
+    //     if (rx_state->redundancy_paks[i+1] != NULL) {
+    //         continue;
+    //     }
 
-        fec_int_t res = 1;
+    //     fec_int_t res = 1;
 
-        for (j = 0; j < k - 1; j++) {
-            if (rx_state->redundancy_paks[j+1] != NULL) {
-                continue;
-            }
-            if(i == j) {
-                idx_j++;
-                continue;
-            }
+    //     for (j = 0; j < k - 1; j++) {
+    //         if (rx_state->redundancy_paks[j+1] != NULL) {
+    //             continue;
+    //         }
+    //         if(i == j) {
+    //             idx_j++;
+    //             continue;
+    //         }
 
-            res = poly_mul(res, state->inv_arr[poly_add(n + i, n + j)]);
+    //         res = poly_mul(res, state->inv_arr[poly_add(n + i, n + j)]);
 
-            idx_j++;
-        }
+    //         idx_j++;
+    //     }
 
-        rx_state->pi_xx[i] = res; // TODO: i or idx_i?
+    //     rx_state->pi_xx[i] = res; // TODO: i or idx_i?
 
-        idx_i++;
-    }
+    //     idx_i++;
+    // }
 
     for (i = 0; i < num_y_missing; i++) {
         fec_int_t res = 1;
@@ -291,7 +347,7 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
             if(j == i) {
                 continue;
             }
-            res = poly_mul(res, state->inv_arr[poly_add(rx_state->missing_y[i], rx_state->missing_y[j])]);
+            res = poly_mul(res, _fec_inv(state, poly_add(rx_state->missing_y[i], rx_state->missing_y[j])));
         }
         rx_state->pi_yy[i] = res;
     }
@@ -302,7 +358,7 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
             if(j == i) {
                 continue;
             }
-            res = poly_mul(res, state->inv_arr[poly_add(rx_state->present_x[i], rx_state->present_x[j])]);
+            res = poly_mul(res, _fec_inv(state, poly_add(rx_state->present_x[i], rx_state->present_x[j])));
         }
         rx_state->pi_xx[i] = res;
     }
@@ -341,7 +397,7 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
         }
         fec_int_t res = 1;
         for (j = 0; j < num_x_present; j++) {
-            res = poly_mul(res, state->inv_arr[poly_add(y_i, rx_state->present_x[j])]);
+            res = poly_mul(res, _fec_inv(state, poly_add(y_i, rx_state->present_x[j])));
         }
         rx_state->pi_ycomp_x[i] = res;
         i++;
@@ -359,20 +415,18 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
             rx_state->tmp_vec_info[i] = res;
             i++;
         }
-        if(rx_state->redundancy_paks[0] != NULL) {
+        VEC_TRACE(rx_state->tmp_vec_info, (fec_int_t)(n - num_y_missing));
+        if(has_one_row) {
             tmp_vec_1s = rx_state->redundancy_paks[0][ii];
         }
-        for (x_i = 0, i = 0; x_i < k - 1; x_i++) {
-            if (rx_state->redundancy_paks[x_i] == NULL) {
-                continue;
-            }
-            res = poly_mul(rx_state->redundancy_paks[x_i + 1][ii], rx_state->pi_xy[i]);
+        //for (x_i = 0, i = 0; x_i < k - 1; x_i++) {
+        for(i = 0; i < num_x_present; i++) {
+            res = poly_mul(rx_state->redundancy_paks[rx_state->present_x[i] - n + 1][ii], rx_state->pi_xy[i]);
             res = poly_mul(res, rx_state->pi_xx[i]);
             rx_state->tmp_vec_redundancy[i] = res;
-            i++;
         }
 
-        for (i = 0; i < k; i++) {
+        for (i = 0; i < num_y_missing; i++) {
 
             res = 0;
 
@@ -380,33 +434,97 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
                 if (rx_state->info_paks[y_j] == NULL) {
                     continue;
                 }
-                res = poly_add(res, poly_mul(rx_state->tmp_vec_info[j], state->inv_arr[poly_add(y_j, rx_state->missing_y[i])]));
+                res = poly_add(res, poly_mul(rx_state->tmp_vec_info[j], _fec_inv(state, poly_add(y_j, rx_state->missing_y[i]))));
                 j++;
             }
-            if (rx_state->redundancy_paks[0] != NULL) {
+            if (has_one_row) {
                 res = poly_add(res, tmp_vec_1s);
             }
-            for (x_j = 0, j = 0; x_j < k - 1; x_j++) {
-                if (rx_state->redundancy_paks[x_j] == NULL) {
-                    continue;
-                }
-                res = poly_add(res, poly_mul(rx_state->tmp_vec_redundancy[j], state->inv_arr[poly_add(x_j, rx_state->missing_y[i])]));
-                j++;
+            //for (x_j = 0, j = 0; x_j < k - 1; x_j++) {
+            for(j = 0; j < num_x_present; j++) {
+                res = poly_add(res, poly_mul(rx_state->tmp_vec_redundancy[j], _fec_inv(state, poly_add(rx_state->present_x[j], rx_state->missing_y[i]))));
             }
 
             res = poly_mul(res, rx_state->pi_yx[i]);
             res = poly_mul(res, rx_state->pi_yy[i]);
 
-            rx_state->redundancy_paks[rx_state->present_x[i] - n][ii] = res;
+            if (i == 0 && has_one_row) {
+                rx_state->redundancy_paks[0][ii] = res;
+            } else {
+                rx_state->redundancy_paks[rx_state->present_x[i - has_one_row] - n + 1][ii] = res;
+            }
         }
-
 
     }
 
+    if (has_one_row) {
+        rx_state->info_paks[rx_state->missing_y[0]] = rx_state->redundancy_paks[0];
+    }
+    for (i = 0; i < num_x_present; i++) {
+        rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
+    }
+
+    return true;
 }
 
 
 
 int main(void) {
+
+    fec_state_t state;
+    fec_tx_state_t tx_state;
+    fec_rx_state_t rx_state;
+
+    uint i;
+
+    uint16_t paks[3][1] = {{1}, {2}, {3}};
+    uint16_t r_paks[3][1];
+
+    TRACE("--0--\n");
+
+    fec_init(&state, sizeof(paks)/sizeof(paks[0]), sizeof(r_paks)/sizeof(r_paks[0]), sizeof(paks[0])/sizeof(paks[0][0]));
+    fec_tx_init(&tx_state, &state);
+    fec_rx_init(&rx_state, &state);
+
+    TRACE("--1--\n");
+
+    for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
+        fec_tx_add_info_pak(&tx_state, paks[i], i);
+    }
+
+    TRACE("--2--\n");
+
+    for (i = 0; i < sizeof(r_paks)/sizeof(r_paks[0]); i++) {
+        fec_tx_get_redundancy_pak(&tx_state, i, r_paks[i]);
+    }
+
+    TRACE("--3--\n");
+
+    // for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
+    //     if (i == 0 || i == 2 || i == 1) {
+    //         continue;
+    //     }
+    //     fec_rx_add_pak(&rx_state, paks[i], i, NULL);
+    // }
+
+    TRACE("--4--\n");
+
+    for (i = 0; i < sizeof(r_paks)/sizeof(r_paks[0]); i++) {
+        fec_rx_add_pak(&rx_state, r_paks[i], (sizeof(paks)/sizeof(paks[0])) + i, NULL);
+    }
+
+    TRACE("--5--\n");
+
+    if (!fec_rx_fill_missing_paks(&rx_state)) {
+        return 0;
+    }
+
+    TRACE("--6--\n");
+
+    for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
+        TRACE("%d ", rx_state.info_paks[i][0]);
+    }
+    TRACE("\n");
+
     return 0;
 }
