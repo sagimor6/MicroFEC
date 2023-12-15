@@ -209,6 +209,13 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
     return true;
 }
 
+void fec_rx_reset(fec_rx_state_t *rx_state) {
+    memset(rx_state->info_paks, 0, rx_state->state->n * sizeof(rx_state->info_paks[0]));
+    memset(rx_state->redundancy_paks, 0, rx_state->state->k * sizeof(rx_state->redundancy_paks[0]));
+    rx_state->num_info = 0;
+    rx_state->num_redundant = 0;
+}
+
 void fec_rx_destroy(fec_rx_state_t *rx_state) {
     if (rx_state->info_paks != NULL) {
         free(rx_state->info_paks);
@@ -512,6 +519,8 @@ int main(void) {
         TRACE("%d ", rx_state.info_paks[i][0]);
     }
     TRACE("\n");
+
+    fec_rx_reset(&rx_state); // not neede here, but to test
 
     fec_rx_destroy(&rx_state);
     fec_tx_destroy(&tx_state);
