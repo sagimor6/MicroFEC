@@ -6,6 +6,20 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifndef MAX
+#define MAX(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
+#endif
+
+#ifndef MIN
+#define MIN(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
+#endif
+
 #define TRACE(fmt, ...) do { printf(fmt, ##__VA_ARGS__); } while(false)
 
 #define VEC_TRACE(vec, num) \
@@ -42,12 +56,12 @@ typedef struct {
 #define POLY_G ((fec_int_t)0b0000000000101011)
 
 typedef struct {
-    fec_state_t* state;
+    const fec_state_t* state;
     const unaligend_fec_int_t** paks;
 } fec_tx_state_t;
 
 typedef struct {
-    fec_state_t* state;
+    const fec_state_t* state;
     unaligend_fec_int_t** info_paks; // size = n
     unaligend_fec_int_t** redundancy_paks; // size = k
     fec_idx_t num_info;
@@ -207,20 +221,25 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
         return false; \
     }
 
+    // TODO: when k > n
+
+    fec_idx_t n = state->n; 
+    fec_idx_t k = state->k;
+
     rx_state->state = state;
-    CALLOC_ATTR(info_paks, state->n);
+    CALLOC_ATTR(info_paks, n);
 
-    CALLOC_ATTR(redundancy_paks, state->k);
+    CALLOC_ATTR(redundancy_paks, k);
 
-    MALLOC_ATTR(tmp_vec_redundancy, state->k - 1);
-    MALLOC_ATTR(missing_y, state->k);
-    MALLOC_ATTR(present_x, state->k - 1);
-    MALLOC_ATTR(pi_xy_div_xx, state->k - 1);
-    MALLOC_ATTR(pi_yx_div_yy, state->k);
-    MALLOC_ATTR(tmp_recovered_ints, state->k);
-    MALLOC_ATTR(tmp_vec_info, state->n - state->k);
-    MALLOC_ATTR(present_y, state->n - state->k);
-    MALLOC_ATTR(pi_ycomp_y_div_ycomp_x, state->n - state->k);
+    MALLOC_ATTR(tmp_vec_redundancy, MIN(k - 1, n));
+    MALLOC_ATTR(missing_y, MIN(k, n));
+    MALLOC_ATTR(present_x, MIN(k - 1, n));
+    MALLOC_ATTR(pi_xy_div_xx, MIN(k - 1, n));
+    MALLOC_ATTR(pi_yx_div_yy, MIN(k, n));
+    MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
+    MALLOC_ATTR(tmp_vec_info, state->n - 1);
+    MALLOC_ATTR(present_y, state->n - 1);
+    MALLOC_ATTR(pi_ycomp_y_div_ycomp_x, state->n - 1);
 
 #undef MALLOC_ATTR
 #undef CALLOC_ATTR
@@ -280,6 +299,7 @@ bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t id
 
 // TODO: idx here can overflow because n + k can be bigger than fec_int_t
 bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover) {
+    // TODO: protect from invalid idx
     fec_int_t n = rx_state->state->n;
     if (idx < n) {
         rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
@@ -298,6 +318,7 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
 
 // TODO: maybe
 bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak) {
+    // TODO: protect from invalid idx
     const fec_state_t *state = tx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
@@ -337,7 +358,6 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
 bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
-    fec_idx_t k = state->k;
     size_t pak_len = state->pak_len;
 
     fec_idx_t num_y_missing = n - rx_state->num_info;
@@ -371,7 +391,7 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
         }
     }
 
-    for (x_i = 0, i = 0; x_i < k - 1; x_i++) {
+    for (x_i = 0, i = 0; i < num_x_present; x_i++) {
         if (rx_state->redundancy_paks[x_i + 1] == NULL) {
             continue;
         }
@@ -490,10 +510,10 @@ int main(void) {
     fec_tx_state_t tx_state;
     fec_rx_state_t rx_state;
 
-    uint i;
+    uint i, j;
 
-    uint16_t paks[3][1] = {{1}, {2}, {3}};
-    uint16_t r_paks[3][1];
+    uint16_t paks[3][2] = {{1, 4}, {2, 5}, {3, 6}};
+    uint16_t r_paks[3][2];
 
     TRACE("--0--\n");
 
@@ -536,10 +556,12 @@ int main(void) {
 
     TRACE("--6--\n");
 
-    for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
-        TRACE("%d ", rx_state.info_paks[i][0]);
+    for (j = 0; j < sizeof(paks[0])/sizeof(paks[0][0]); j++) {
+        for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
+            TRACE("%d ", rx_state.info_paks[i][j]);
+        }
+        TRACE("\n");
     }
-    TRACE("\n");
 
     fec_rx_reset(&rx_state); // not neede here, but to test
 
