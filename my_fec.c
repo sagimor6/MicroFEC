@@ -503,6 +503,165 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
 }
 
 
+bool fec_rx_fill_missing_paks_min_mem(fec_rx_state_t *rx_state) {
+    const fec_state_t *state = rx_state->state;
+    fec_idx_t n = state->n;
+    size_t pak_len = state->pak_len;
+
+    fec_idx_t num_y_missing = n - rx_state->num_info;
+    bool has_one_row;
+    fec_idx_t num_x_present = 0;
+
+    fec_idx_t i, j;
+    fec_idx_t x_i, y_i, y_j;
+    size_t ii;
+
+    if (rx_state->num_redundant < num_y_missing) {
+        return false;
+    }
+
+    if (num_y_missing == 0) {
+        return true;
+    }
+
+    has_one_row = rx_state->redundancy_paks[0] != NULL;
+    if (num_y_missing >= has_one_row) {
+        num_x_present = num_y_missing - has_one_row;
+    }
+
+    for (y_i = 0, i = 0; i < num_y_missing; y_i++) {
+        if (rx_state->info_paks[y_i] == NULL) {
+            rx_state->missing_y[i] = y_i;
+            i++;
+        }
+    }
+
+    for (x_i = 0, i = 0; i < num_x_present; x_i++) {
+        if (rx_state->redundancy_paks[x_i + 1] == NULL) {
+            continue;
+        }
+        rx_state->present_x[i] = n + x_i;
+        i++;
+    }
+
+    for (y_i = 0, i = 0; y_i < n; y_i++) {
+        if (rx_state->info_paks[y_i] == NULL) {
+            continue;
+        }
+        fec_int_t pi_ycomp_y_div_ycomp_x_i = 1;
+        for (j = 0; j < num_y_missing; j++) {
+            pi_ycomp_y_div_ycomp_x_i = poly_mul(pi_ycomp_y_div_ycomp_x_i, poly_add(y_i, rx_state->missing_y[j]));
+        }
+        for (j = 0; j < num_x_present; j++) {
+            pi_ycomp_y_div_ycomp_x_i = poly_mul(pi_ycomp_y_div_ycomp_x_i, _fec_inv(state, poly_add(y_i, rx_state->present_x[j])));
+        }
+        for (ii = 0; ii < pak_len; ii++) {
+            rx_state->info_paks[y_i][ii] = poly_mul(rx_state->info_paks[y_i][ii], pi_ycomp_y_div_ycomp_x_i);
+        }
+        i++;
+    }
+
+    for (i = 0; i < num_x_present; i++) {
+        fec_int_t pi_xy_div_xx_i = 1;
+        for (j = 0; j < num_y_missing; j++) {
+            pi_xy_div_xx_i = poly_mul(pi_xy_div_xx_i, poly_add(rx_state->present_x[i], rx_state->missing_y[j]));
+        }
+        for (j = 0; j < num_x_present; j++) {
+            if(j == i) {
+                continue;
+            }
+            pi_xy_div_xx_i = poly_mul(pi_xy_div_xx_i, _fec_inv(state, poly_add(rx_state->present_x[i], rx_state->present_x[j])));
+        }
+
+        unaligend_fec_int_t *pak = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
+        for (ii = 0; ii < pak_len; ii++) {
+            pak[ii] = poly_mul(pak[ii], pi_xy_div_xx_i);
+        }
+    }
+
+    for (ii = 0; ii < pak_len; ii++) {
+        fec_int_t res;
+
+        for (i = 0; i < num_y_missing; i++) {
+
+            res = 0;
+
+            for (y_j = 0, j = 0; y_j < n; y_j++) {
+                if (rx_state->info_paks[y_j] == NULL) {
+                    continue;
+                }
+                res = poly_add(res, poly_mul(rx_state->info_paks[y_j][ii], _fec_inv(state, poly_add(y_j, rx_state->missing_y[i]))));
+                j++;
+            }
+            if (has_one_row) {
+                res = poly_add(res, rx_state->redundancy_paks[0][ii]);
+            }
+            //for (x_j = 0, j = 0; x_j < k - 1; x_j++) {
+            for(j = 0; j < num_x_present; j++) {
+                res = poly_add(res, poly_mul(rx_state->redundancy_paks[rx_state->present_x[j] - n + 1][ii], _fec_inv(state, poly_add(rx_state->present_x[j], rx_state->missing_y[i]))));
+            }
+
+            rx_state->tmp_recovered_ints[i] = res;
+        }
+
+        for (i = 0; i < num_y_missing; i++) {
+            if (i == 0 && has_one_row) {
+                rx_state->redundancy_paks[0][ii] = rx_state->tmp_recovered_ints[i];
+            } else {
+                rx_state->redundancy_paks[rx_state->present_x[i - has_one_row] - n + 1][ii] = rx_state->tmp_recovered_ints[i];
+            }
+        }
+    }
+
+    for (i = 0; i < num_y_missing; i++) {
+        fec_int_t pi_yx_div_yy_i = 1;
+        for (j = 0; j < num_x_present; j++) {
+            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, poly_add(rx_state->missing_y[i], rx_state->present_x[j]));
+        }
+        for (j = 0; j < num_y_missing; j++) {
+            if(j == i) {
+                continue;
+            }
+            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, _fec_inv(state, poly_add(rx_state->missing_y[i], rx_state->missing_y[j])));
+        }
+
+        for (ii = 0; ii < pak_len; ii++) {
+            if (i == 0 && has_one_row) {
+                rx_state->redundancy_paks[0][ii] = poly_mul(rx_state->redundancy_paks[0][ii], pi_yx_div_yy_i);
+            } else {
+                rx_state->redundancy_paks[rx_state->present_x[i - has_one_row] - n + 1][ii] = poly_mul(rx_state->redundancy_paks[rx_state->present_x[i - has_one_row] - n + 1][ii], pi_yx_div_yy_i);
+            }
+        }
+    }
+
+    for (y_i = 0, i = 0; y_i < n; y_i++) {
+        if (rx_state->info_paks[y_i] == NULL) {
+            continue;
+        }
+        fec_int_t inv_pi_ycomp_y_div_ycomp_x_i = 1;
+        for (j = 0; j < num_y_missing; j++) {
+            inv_pi_ycomp_y_div_ycomp_x_i = poly_mul(inv_pi_ycomp_y_div_ycomp_x_i, _fec_inv(state, poly_add(y_i, rx_state->missing_y[j])));
+        }
+        for (j = 0; j < num_x_present; j++) {
+            inv_pi_ycomp_y_div_ycomp_x_i = poly_mul(inv_pi_ycomp_y_div_ycomp_x_i,  poly_add(y_i, rx_state->present_x[j]));
+        }
+        for (ii = 0; ii < pak_len; ii++) {
+            rx_state->info_paks[y_i][ii] = poly_mul(rx_state->info_paks[y_i][ii], inv_pi_ycomp_y_div_ycomp_x_i);
+        }
+        i++;
+    }
+
+    if (has_one_row) {
+        rx_state->info_paks[rx_state->missing_y[0]] = rx_state->redundancy_paks[0];
+    }
+    for (i = 0; i < num_x_present; i++) {
+        rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
+    }
+
+    return true;
+}
+
+
 
 int main(void) {
 
