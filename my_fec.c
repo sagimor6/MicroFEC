@@ -21,12 +21,13 @@
 #define CHECK(cond) if(!(cond)) { TRACE("check failed %d %s\n", __LINE__, #cond); }
 
 typedef uint16_t fec_int_t;
+typedef uint32_t fec_idx_t;
 
 typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
 
 typedef struct {
-    fec_int_t n;
-    fec_int_t k;
+    fec_idx_t n;
+    fec_idx_t k;
     size_t pak_len;
 
     // n+k-1 <= (1<<(sizeof(fec_int_t)*8))
@@ -49,8 +50,8 @@ typedef struct {
     fec_state_t* state;
     unaligend_fec_int_t** info_paks; // size = n
     unaligend_fec_int_t** redundancy_paks; // size = k
-    fec_int_t num_info;
-    fec_int_t num_redundant;
+    fec_idx_t num_info;
+    fec_idx_t num_redundant;
 
     fec_int_t *missing_y; // size = k
     fec_int_t *present_x; // size = k - 1
@@ -131,7 +132,7 @@ static inline fec_int_t _fec_inv(const fec_state_t *state, fec_int_t a) {
     return state->inv_arr[a - 1];
 }
 
-bool fec_init(fec_state_t *state, fec_int_t n, fec_int_t k, size_t pak_len) {
+bool fec_init(fec_state_t *state, fec_idx_t n, fec_idx_t k, size_t pak_len) {
     state->n = n;
     state->k = k;
     state->pak_len = pak_len;
@@ -142,9 +143,14 @@ bool fec_init(fec_state_t *state, fec_int_t n, fec_int_t k, size_t pak_len) {
         return false;
     }
 
-    if (n + k - 1 != 0) {
-        size_t arr_size = (1 << log2_ceil(n + k - 1)) - 1;
-        state->inv_arr = malloc(sizeof(fec_int_t) * arr_size);
+    fec_idx_t n_k_1 = n + k - 1;
+    if (n_k_1 < n || n_k_1 > (((fec_idx_t)1)<<(sizeof(fec_int_t)*8))) {
+        return false;
+    }
+
+    if (n_k_1 != 0) {
+        size_t arr_size = (1 << log2_ceil(n_k_1)) - 1;
+        state->inv_arr = malloc(sizeof(state->inv_arr[0]) * arr_size);
         if (state->inv_arr == NULL) {
             return false;
         }
@@ -183,26 +189,41 @@ void fec_tx_destroy(fec_tx_state_t *tx_state) {
     }
 }
 
+void fec_rx_destroy(fec_rx_state_t *rx_state);
+
 bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
     memset(rx_state, 0, sizeof(*rx_state));
 
-    rx_state->state = state;
-    rx_state->info_paks = calloc(state->n, sizeof(rx_state->info_paks[0]));
-    if (rx_state->info_paks == NULL) {
-        return false;
+#define MALLOC_ATTR(name, size) \
+    rx_state->name = malloc(sizeof(rx_state->name[0]) * (size)); \
+    if (rx_state->name == NULL) { \
+        fec_rx_destroy(rx_state); \
+        return false; \
+    }
+#define CALLOC_ATTR(name, size) \
+    rx_state->name = calloc((size), sizeof(rx_state->name[0])); \
+    if (rx_state->name == NULL) { \
+        fec_rx_destroy(rx_state); \
+        return false; \
     }
 
-    rx_state->redundancy_paks = calloc(state->k, sizeof(rx_state->redundancy_paks[0]));
+    rx_state->state = state;
+    CALLOC_ATTR(info_paks, state->n);
 
-    rx_state->tmp_vec_redundancy = malloc(sizeof(rx_state->tmp_vec_redundancy[0]) * (state->k - 1));
-    rx_state->missing_y = malloc(sizeof(rx_state->missing_y[0]) * state->k);
-    rx_state->present_x = malloc(sizeof(rx_state->present_x[0]) * (state->k - 1));
-    rx_state->pi_xy_div_xx = malloc(sizeof(rx_state->pi_xy_div_xx[0]) * (state->k - 1));
-    rx_state->pi_yx_div_yy = malloc(sizeof(rx_state->pi_yx_div_yy[0]) * state->k);
-    rx_state->tmp_recovered_ints = malloc(sizeof(rx_state->tmp_recovered_ints[0]) * state->k);
-    rx_state->tmp_vec_info = malloc(sizeof(rx_state->tmp_vec_info[0]) * (state->n - state->k));
-    rx_state->present_y = malloc(sizeof(rx_state->present_y[0]) * (state->n - state->k));
-    rx_state->pi_ycomp_y_div_ycomp_x = malloc(sizeof(rx_state->pi_ycomp_y_div_ycomp_x[0]) * (state->n - state->k));
+    CALLOC_ATTR(redundancy_paks, state->k);
+
+    MALLOC_ATTR(tmp_vec_redundancy, state->k - 1);
+    MALLOC_ATTR(missing_y, state->k);
+    MALLOC_ATTR(present_x, state->k - 1);
+    MALLOC_ATTR(pi_xy_div_xx, state->k - 1);
+    MALLOC_ATTR(pi_yx_div_yy, state->k);
+    MALLOC_ATTR(tmp_recovered_ints, state->k);
+    MALLOC_ATTR(tmp_vec_info, state->n - state->k);
+    MALLOC_ATTR(present_y, state->n - state->k);
+    MALLOC_ATTR(pi_ycomp_y_div_ycomp_x, state->n - state->k);
+
+#undef MALLOC_ATTR
+#undef CALLOC_ATTR
 
     rx_state->num_info = 0;
     rx_state->num_redundant = 0;
@@ -252,13 +273,13 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
     }
 }
 
-bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_int_t idx) {
+bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx) {
     tx_state->paks[idx] = (const unaligend_fec_int_t*)pak;
     return true;
 }
 
 // TODO: idx here can overflow because n + k can be bigger than fec_int_t
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_int_t idx, bool *can_recover) {
+bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover) {
     fec_int_t n = rx_state->state->n;
     if (idx < n) {
         rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
@@ -276,11 +297,11 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_int_t idx, bool *ca
 }
 
 // TODO: maybe
-bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_int_t idx, void *pak) {
+bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak) {
     const fec_state_t *state = tx_state->state;
-    fec_int_t n = state->n;
+    fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
-    fec_int_t i;
+    fec_idx_t i;
     size_t j;
     unaligend_fec_int_t* out_pak = (unaligend_fec_int_t*)pak;
 
@@ -315,16 +336,16 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_int_t idx, vo
 
 bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
-    fec_int_t n = state->n;
-    fec_int_t k = state->k;
+    fec_idx_t n = state->n;
+    fec_idx_t k = state->k;
     size_t pak_len = state->pak_len;
 
-    fec_int_t num_y_missing = n - rx_state->num_info;
+    fec_idx_t num_y_missing = n - rx_state->num_info;
     bool has_one_row;
-    fec_int_t num_x_present = 0;
+    fec_idx_t num_x_present = 0;
 
-    fec_int_t i, j;
-    fec_int_t x_i, y_i, y_j;
+    fec_idx_t i, j;
+    fec_idx_t x_i, y_i, y_j;
     size_t ii;
 
     if (rx_state->num_redundant < num_y_missing) {
