@@ -355,7 +355,7 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
     return true;
 }
 
-bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
+bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
@@ -503,7 +503,7 @@ bool fec_rx_fill_missing_paks(fec_rx_state_t *rx_state) {
 }
 
 
-bool fec_rx_fill_missing_paks_min_mem(fec_rx_state_t *rx_state) {
+bool fec_rx_fill_missing_paks_min_mem(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
