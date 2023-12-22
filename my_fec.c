@@ -646,6 +646,10 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 }
 #endif
 
+void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state) {
+    return (void**)rx_state->info_paks;
+}
+
 int main(void) {
 
     fec_state_t state;
@@ -698,9 +702,11 @@ int main(void) {
 
     TRACE("--6--\n");
 
+    uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
+
     for (j = 0; j < sizeof(paks[0])/sizeof(paks[0][0]); j++) {
         for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
-            TRACE("%d ", rx_state.info_paks[i][j]);
+            TRACE("%d ", res[i][j]);
         }
         TRACE("\n");
     }
