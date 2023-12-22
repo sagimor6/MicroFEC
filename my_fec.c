@@ -63,13 +63,18 @@ typedef struct {
 typedef struct {
     const fec_state_t* state;
     unaligend_fec_int_t** info_paks; // size = n
-    unaligend_fec_int_t** redundancy_paks; // size = k
+    unaligend_fec_int_t** redundancy_paks; // size = real k
     fec_idx_t num_info;
     fec_idx_t num_redundant;
 
+    // all use this:
     fec_int_t *missing_y; // size = k
     fec_int_t *present_x; // size = k - 1
 
+    // min mem uses this:
+    fec_int_t *tmp_recovered_ints; // size = k
+
+    // regular uses this:
     fec_int_t *pi_xy_div_xx; // size = k - 1
     fec_int_t *pi_yx_div_yy; // size = k
 
@@ -77,13 +82,8 @@ typedef struct {
 
     fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - k
 
-    // TODO: can replace with inplace in packet mem
     fec_int_t *tmp_vec_info; // size = n - k
     fec_int_t *tmp_vec_redundancy; // size = k - 1
-
-    fec_int_t *tmp_recovered_ints; // size = k
-    
-
 } fec_rx_state_t;
 
 // num must be > 0
