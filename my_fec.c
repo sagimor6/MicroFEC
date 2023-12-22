@@ -151,8 +151,7 @@ bool fec_init(fec_state_t *state, fec_idx_t n, fec_idx_t k, size_t pak_len) {
     state->k = k;
     state->pak_len = pak_len;
 
-    // TODO: int overflows everywhere
-
+    // TODO: i can deal with this case
     if (n == 0 || k == 0) {
         return false;
     }
@@ -220,8 +219,6 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
         fec_rx_destroy(rx_state); \
         return false; \
     }
-
-    // TODO: when k > n
 
     fec_idx_t n = state->n; 
     fec_idx_t k = state->k;
@@ -293,20 +290,30 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
 }
 
 bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx) {
+    if (idx >= tx_state->state->n) {
+        return false;
+    }
     tx_state->paks[idx] = (const unaligend_fec_int_t*)pak;
     return true;
 }
 
-// TODO: idx here can overflow because n + k can be bigger than fec_int_t
 bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover) {
-    // TODO: protect from invalid idx
     fec_int_t n = rx_state->state->n;
+
+    if (idx >= n + rx_state->state->k) {
+        return false;
+    }
+
     if (idx < n) {
-        rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
-        rx_state->num_info++;
+        if (rx_state->info_paks[idx] == NULL) {
+            rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
+            rx_state->num_info++;
+        }
     } else {
-        rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
-        rx_state->num_redundant++;
+        if (rx_state->redundancy_paks[idx - n] == NULL) {
+            rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
+            rx_state->num_redundant++;
+        }
     }
 
     if (can_recover) {
@@ -326,30 +333,24 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
     size_t j;
     unaligend_fec_int_t* out_pak = (unaligend_fec_int_t*)pak;
 
+    // TODO: this does not affect the time complexity of the function, but maybe remember number in struct
     for (i = 0; i < n; i++) {
         if (tx_state->paks[i] == NULL) {
             return false;
         }
     }
 
-    // TODO: move if inside the fors?
-    if (idx == 0) { 
-        for (j = 0; j < pak_len; j++) {
-            fec_int_t res = 0;
-            for (i = 0; i < n; i++) {
+    for (j = 0; j < pak_len; j++) {
+        fec_int_t res = 0;
+        for (i = 0; i < n; i++) {
+            if(idx == 0) {
                 res = poly_add(res, tx_state->paks[i][j]);
-            }
-            out_pak[j] = res;
-        }
-    } else {
-        for (j = 0; j < pak_len; j++) {
-            fec_int_t res = 0;
-            for (i = 0; i < n; i++) {
+            } else {
                 fec_int_t a_i = poly_add(n + idx - 1, i);
                 res = poly_add(res, poly_mul(tx_state->paks[i][j], _fec_inv(state, a_i)));
             }
-            out_pak[j] = res;
         }
+        out_pak[j] = res;
     }
 
     return true;
@@ -391,6 +392,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+    // TODO: move this to fec_rx_add_pak
     for (x_i = 0, i = 0; i < num_x_present; x_i++) {
         if (rx_state->redundancy_paks[x_i + 1] == NULL) {
             continue;
