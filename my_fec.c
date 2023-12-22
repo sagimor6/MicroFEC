@@ -4,7 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+
+#include "my_fec.h"
 
 #ifndef MAX
 #define MAX(a,b) \
@@ -20,87 +21,24 @@
      _a < _b ? _a : _b; })
 #endif
 
-#define TRACE(fmt, ...) do { printf(fmt, ##__VA_ARGS__); } while(false)
 
-#define VEC_TRACE(vec, num) \
-{ \
-    unsigned int __i = 0;\
-    TRACE("%s:", #vec);\
-    for(__i = 0; __i < (num); __i++) {\
-        TRACE(" %d", (vec)[__i]);\
-    }\
-    TRACE("\n");\
-}
-
-#define CHECK(cond) if(!(cond)) { TRACE("check failed %d %s\n", __LINE__, #cond); }
-
-typedef uint16_t fec_int_t;
-typedef uint32_t fec_idx_t;
-
-typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
-
-typedef struct {
-    fec_idx_t n;
-    fec_idx_t k;
-    size_t pak_len;
-
-    // n+k-1 <= (1<<(sizeof(fec_int_t)*8))
-
-    // 0,...,n+k-2 are the numbers
-    // 1,...,1<<ceil(log2(n+k-1))
-
-    fec_int_t* inv_arr; // upper power of two closest to n+k-2
-
-} fec_state_t;
 
 #define POLY_G ((fec_int_t)0b0000000000101011)
 
-typedef struct {
-    const fec_state_t* state;
-    const unaligend_fec_int_t** paks;
-} fec_tx_state_t;
-
-typedef struct {
-    const fec_state_t* state;
-    unaligend_fec_int_t** info_paks; // size = n
-    unaligend_fec_int_t** redundancy_paks; // size = real k
-    fec_idx_t num_info;
-    fec_idx_t num_redundant;
-
-    // all use this:
-    fec_int_t *missing_y; // size = k
-    fec_int_t *present_x; // size = k - 1
-
-#ifdef FEC_MIN_MEM
-    // min mem uses this:
-    fec_int_t *tmp_recovered_ints; // size = k
-#else
-    // regular uses this:
-    fec_int_t *pi_xy_div_xx; // size = k - 1
-    fec_int_t *pi_yx_div_yy; // size = k
-
-    fec_int_t *present_y; // size = n - 1
-
-    fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - 1
-
-    fec_int_t *tmp_vec_info; // size = n - 1
-    fec_int_t *tmp_vec_redundancy; // size = k - 1
-#endif
-} fec_rx_state_t;
 
 // num must be > 0
-unsigned int log2_ceil(unsigned int num) {
+static unsigned int log2_ceil(unsigned int num) {
     if (num == 1) {
         return 0;
     }
     return (sizeof(num)*8) - __builtin_clz(num - 1);
 }
 
-fec_int_t poly_add(fec_int_t a, fec_int_t b) {
+static fec_int_t poly_add(fec_int_t a, fec_int_t b) {
     return a ^ b;
 }
 
-fec_int_t poly_shift_1(fec_int_t a) {
+static fec_int_t poly_shift_1(fec_int_t a) {
     if ((a & (1<<(sizeof(fec_int_t)*8 - 1))) != 0) {
         return poly_add((a << 1), POLY_G);
     } else {
@@ -108,7 +46,7 @@ fec_int_t poly_shift_1(fec_int_t a) {
     }
 }
 
-fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
+static fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
     fec_int_t cur_bit = (1 << (sizeof(fec_int_t)*8 - 1));
     size_t i;
     fec_int_t res = 0;
@@ -124,7 +62,7 @@ fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
     return res;
 }
 
-fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
+static fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
     fec_int_t res = 1;
     fec_int_t a_2_i = a;
     while (n != 0) {
@@ -138,9 +76,8 @@ fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
     return res;
 }
 
-fec_int_t poly_inv(fec_int_t a) {
+static fec_int_t poly_inv(fec_int_t a) {
     fec_int_t res = poly_pow(a, (fec_int_t)-2);
-    CHECK(poly_mul(a, res) == 1);
     return res;
 }
 
@@ -203,8 +140,6 @@ void fec_tx_destroy(fec_tx_state_t *tx_state) {
         free(tx_state->paks);
     }
 }
-
-void fec_rx_destroy(fec_rx_state_t *rx_state);
 
 bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
     memset(rx_state, 0, sizeof(*rx_state));
@@ -650,72 +585,3 @@ void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state) {
     return (void**)rx_state->info_paks;
 }
 
-int main(void) {
-
-    fec_state_t state;
-    fec_tx_state_t tx_state;
-    fec_rx_state_t rx_state;
-
-    unsigned int i, j;
-
-    uint16_t paks[3][2] = {{1, 4}, {2, 5}, {3, 6}};
-    uint16_t r_paks[3][2];
-
-    TRACE("--0--\n");
-
-    fec_init(&state, sizeof(paks)/sizeof(paks[0]), sizeof(r_paks)/sizeof(r_paks[0]), sizeof(paks[0])/sizeof(paks[0][0]));
-    fec_tx_init(&tx_state, &state);
-    fec_rx_init(&rx_state, &state);
-
-    TRACE("--1--\n");
-
-    for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
-        fec_tx_add_info_pak(&tx_state, paks[i], i);
-    }
-
-    TRACE("--2--\n");
-
-    for (i = 0; i < sizeof(r_paks)/sizeof(r_paks[0]); i++) {
-        fec_tx_get_redundancy_pak(&tx_state, i, r_paks[i]);
-    }
-
-    TRACE("--3--\n");
-
-    for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
-        if (i == 0 || i == 2 || i == 1) {
-            continue;
-        }
-        fec_rx_add_pak(&rx_state, paks[i], i, NULL);
-    }
-
-    TRACE("--4--\n");
-
-    for (i = 0; i < sizeof(r_paks)/sizeof(r_paks[0]); i++) {
-        fec_rx_add_pak(&rx_state, r_paks[i], (sizeof(paks)/sizeof(paks[0])) + i, NULL);
-    }
-
-    TRACE("--5--\n");
-
-    if (!fec_rx_fill_missing_paks(&rx_state)) {
-        return 0;
-    }
-
-    TRACE("--6--\n");
-
-    uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
-
-    for (j = 0; j < sizeof(paks[0])/sizeof(paks[0][0]); j++) {
-        for (i = 0; i < sizeof(paks)/sizeof(paks[0]); i++) {
-            TRACE("%d ", res[i][j]);
-        }
-        TRACE("\n");
-    }
-
-    fec_rx_reset(&rx_state); // not neede here, but to test
-
-    fec_rx_destroy(&rx_state);
-    fec_tx_destroy(&tx_state);
-    fec_destroy(&state);
-
-    return 0;
-}
