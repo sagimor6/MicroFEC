@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "my_fec.h"
+#include "micro_fec.h"
 
 #ifndef MAX
 #define MAX(a,b) \

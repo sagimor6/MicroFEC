@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "my_fec.h"
+#include "micro_fec.h"
 
 #define TRACE(fmt, ...) do { printf(fmt, ##__VA_ARGS__); } while(false)
 

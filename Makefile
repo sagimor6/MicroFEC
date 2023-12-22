@@ -11,7 +11,7 @@ all: fec_test
 fec_test: fec_test.elf
 	./fec_test.elf
 
-fec_test.elf: main.c my_fec.c
+fec_test.elf: main.c micro_fec.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 .PHONY clean:
