@@ -71,9 +71,10 @@ typedef struct {
     fec_int_t *missing_y; // size = k
     fec_int_t *present_x; // size = k - 1
 
+#ifdef FEC_MIN_MEM
     // min mem uses this:
     fec_int_t *tmp_recovered_ints; // size = k
-
+#else
     // regular uses this:
     fec_int_t *pi_xy_div_xx; // size = k - 1
     fec_int_t *pi_yx_div_yy; // size = k
@@ -84,6 +85,7 @@ typedef struct {
 
     fec_int_t *tmp_vec_info; // size = n - 1
     fec_int_t *tmp_vec_redundancy; // size = k - 1
+#endif
 } fec_rx_state_t;
 
 // num must be > 0
@@ -229,14 +231,16 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
     MALLOC_ATTR(missing_y, MIN(k, n));
     MALLOC_ATTR(present_x, MIN(k - 1, n));
 
+#ifdef FEC_MIN_MEM
     MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
-    
+#else
     MALLOC_ATTR(pi_xy_div_xx, MIN(k - 1, n));
     MALLOC_ATTR(pi_yx_div_yy, MIN(k, n));
     MALLOC_ATTR(tmp_vec_redundancy, MIN(k - 1, n));
     MALLOC_ATTR(tmp_vec_info, state->n - 1);
     MALLOC_ATTR(present_y, state->n - 1);
     MALLOC_ATTR(pi_ycomp_y_div_ycomp_x, state->n - 1);
+#endif
 
 #undef MALLOC_ATTR
 #undef CALLOC_ATTR
@@ -263,14 +267,16 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
     FREE_ATTR(redundancy_paks);
     FREE_ATTR(present_x);
     FREE_ATTR(missing_y);
+#ifdef FEC_MIN_MEM
     FREE_ATTR(tmp_recovered_ints);
-
+#else
     FREE_ATTR(pi_xy_div_xx);
     FREE_ATTR(pi_yx_div_yy);
     FREE_ATTR(tmp_vec_info);
     FREE_ATTR(tmp_vec_redundancy);
     FREE_ATTR(present_y);
     FREE_ATTR(pi_ycomp_y_div_ycomp_x);
+#endif
 #undef FREE_ATTR
 }
 
@@ -347,6 +353,7 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
     return true;
 }
 
+#ifndef FEC_MIN_MEM
 bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
@@ -486,8 +493,9 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     return true;
 }
 
+#else
 
-bool fec_rx_fill_missing_paks_min_mem(const fec_rx_state_t *rx_state) {
+bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
@@ -636,8 +644,7 @@ bool fec_rx_fill_missing_paks_min_mem(const fec_rx_state_t *rx_state) {
 
     return true;
 }
-
-
+#endif
 
 int main(void) {
 
