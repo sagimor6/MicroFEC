@@ -24,7 +24,7 @@
 
 #define VEC_TRACE(vec, num) \
 { \
-    uint __i = 0;\
+    unsigned int __i = 0;\
     TRACE("%s:", #vec);\
     for(__i = 0; __i < (num); __i++) {\
         TRACE(" %d", (vec)[__i]);\
@@ -87,7 +87,7 @@ typedef struct {
 } fec_rx_state_t;
 
 // num must be > 0
-uint log2_ceil(uint num) {
+unsigned int log2_ceil(unsigned int num) {
     if (num == 1) {
         return 0;
     }
@@ -669,7 +669,7 @@ int main(void) {
     fec_tx_state_t tx_state;
     fec_rx_state_t rx_state;
 
-    uint i, j;
+    unsigned int i, j;
 
     uint16_t paks[3][2] = {{1, 4}, {2, 5}, {3, 6}};
     uint16_t r_paks[3][2];
