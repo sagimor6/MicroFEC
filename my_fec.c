@@ -312,15 +312,17 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
     return true;
 }
 
-// TODO: maybe
 bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak) {
-    // TODO: protect from invalid idx
     const fec_state_t *state = tx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
     fec_idx_t i;
     size_t j;
     unaligend_fec_int_t* out_pak = (unaligend_fec_int_t*)pak;
+
+    if (idx >= tx_state->state->k) {
+        return false;
+    }
 
     // TODO: this does not affect the time complexity of the function, but maybe remember number in struct
     for (i = 0; i < n; i++) {
