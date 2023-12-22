@@ -78,11 +78,11 @@ typedef struct {
     fec_int_t *pi_xy_div_xx; // size = k - 1
     fec_int_t *pi_yx_div_yy; // size = k
 
-    fec_int_t *present_y; // size = n - k
+    fec_int_t *present_y; // size = n - 1
 
-    fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - k
+    fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - 1
 
-    fec_int_t *tmp_vec_info; // size = n - k
+    fec_int_t *tmp_vec_info; // size = n - 1
     fec_int_t *tmp_vec_redundancy; // size = k - 1
 } fec_rx_state_t;
 
