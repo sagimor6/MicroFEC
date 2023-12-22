@@ -225,15 +225,15 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
 
     rx_state->state = state;
     CALLOC_ATTR(info_paks, n);
-
     CALLOC_ATTR(redundancy_paks, k);
-
-    MALLOC_ATTR(tmp_vec_redundancy, MIN(k - 1, n));
     MALLOC_ATTR(missing_y, MIN(k, n));
     MALLOC_ATTR(present_x, MIN(k - 1, n));
+
+    MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
+    
     MALLOC_ATTR(pi_xy_div_xx, MIN(k - 1, n));
     MALLOC_ATTR(pi_yx_div_yy, MIN(k, n));
-    MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
+    MALLOC_ATTR(tmp_vec_redundancy, MIN(k - 1, n));
     MALLOC_ATTR(tmp_vec_info, state->n - 1);
     MALLOC_ATTR(present_y, state->n - 1);
     MALLOC_ATTR(pi_ycomp_y_div_ycomp_x, state->n - 1);
@@ -254,39 +254,24 @@ void fec_rx_reset(fec_rx_state_t *rx_state) {
 }
 
 void fec_rx_destroy(fec_rx_state_t *rx_state) {
-    if (rx_state->info_paks != NULL) {
-        free(rx_state->info_paks);
+#define FREE_ATTR(name) \
+    if (rx_state->name != NULL) { \
+        free(rx_state->name); \
     }
-    if (rx_state->redundancy_paks != NULL) {
-        free(rx_state->redundancy_paks);
-    }
-    if (rx_state->tmp_vec_redundancy != NULL) {
-        free(rx_state->tmp_vec_redundancy);
-    }
-    if (rx_state->missing_y != NULL) {
-        free(rx_state->missing_y);
-    }
-    if (rx_state->present_x != NULL) {
-        free(rx_state->present_x);
-    }
-    if (rx_state->pi_xy_div_xx != NULL) {
-        free(rx_state->pi_xy_div_xx);
-    }
-    if (rx_state->pi_yx_div_yy != NULL) {
-        free(rx_state->pi_yx_div_yy);
-    }
-    if (rx_state->tmp_recovered_ints != NULL) {
-        free(rx_state->tmp_recovered_ints);
-    }
-    if (rx_state->tmp_vec_info != NULL) {
-        free(rx_state->tmp_vec_info);
-    }
-    if (rx_state->present_y != NULL) {
-        free(rx_state->present_y);
-    }
-    if (rx_state->pi_ycomp_y_div_ycomp_x != NULL) {
-        free(rx_state->pi_ycomp_y_div_ycomp_x);
-    }
+    
+    FREE_ATTR(info_paks);
+    FREE_ATTR(redundancy_paks);
+    FREE_ATTR(present_x);
+    FREE_ATTR(missing_y);
+    FREE_ATTR(tmp_recovered_ints);
+
+    FREE_ATTR(pi_xy_div_xx);
+    FREE_ATTR(pi_yx_div_yy);
+    FREE_ATTR(tmp_vec_info);
+    FREE_ATTR(tmp_vec_redundancy);
+    FREE_ATTR(present_y);
+    FREE_ATTR(pi_ycomp_y_div_ycomp_x);
+#undef FREE_ATTR
 }
 
 bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx) {
