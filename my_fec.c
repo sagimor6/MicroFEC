@@ -297,6 +297,10 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
     } else {
         if (rx_state->redundancy_paks[idx - n] == NULL) {
             rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
+            if (idx != n) {
+                bool has_one_row = (rx_state->redundancy_paks[0] != NULL);
+                rx_state->present_x[rx_state->num_redundant - has_one_row] = idx - 1;
+            }
             rx_state->num_redundant++;
         }
     }
@@ -351,7 +355,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     fec_idx_t num_x_present = 0;
 
     fec_idx_t i, j;
-    fec_idx_t x_i, y_i, y_j;
+    fec_idx_t y_i, y_j;
     size_t ii;
 
     if (rx_state->num_redundant < num_y_missing) {
@@ -375,15 +379,6 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
             rx_state->missing_y[i] = y_i;
             i++;
         }
-    }
-
-    // TODO: move this to fec_rx_add_pak
-    for (x_i = 0, i = 0; i < num_x_present; x_i++) {
-        if (rx_state->redundancy_paks[x_i + 1] == NULL) {
-            continue;
-        }
-        rx_state->present_x[i] = n + x_i;
-        i++;
     }
 
     for (i = 0; i < num_x_present; i++) {
@@ -500,7 +495,7 @@ bool fec_rx_fill_missing_paks_min_mem(const fec_rx_state_t *rx_state) {
     fec_idx_t num_x_present = 0;
 
     fec_idx_t i, j;
-    fec_idx_t x_i, y_i, y_j;
+    fec_idx_t y_i, y_j;
     size_t ii;
 
     if (rx_state->num_redundant < num_y_missing) {
@@ -521,14 +516,6 @@ bool fec_rx_fill_missing_paks_min_mem(const fec_rx_state_t *rx_state) {
             rx_state->missing_y[i] = y_i;
             i++;
         }
-    }
-
-    for (x_i = 0, i = 0; i < num_x_present; x_i++) {
-        if (rx_state->redundancy_paks[x_i + 1] == NULL) {
-            continue;
-        }
-        rx_state->present_x[i] = n + x_i;
-        i++;
     }
 
     for (y_i = 0, i = 0; y_i < n; y_i++) {
