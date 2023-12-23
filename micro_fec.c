@@ -370,7 +370,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 
     for (ii = 0; ii < pak_len; ii++) {
         fec_int_t res;
-        fec_int_t tmp_vec_1s;
+        fec_int_t tmp_vec_1s = 0;
         for (y_i = 0, i = 0; y_i < n; y_i++) {
             if (rx_state->info_paks[y_i] == NULL) {
                 continue;
