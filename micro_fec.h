@@ -1,5 +1,5 @@
-#ifndef __MY_FEC_H__
-#define __MY_FEC_H__
+#ifndef __MICRO_FEC_H__
+#define __MICRO_FEC_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -80,4 +80,4 @@ EXPORT void fec_rx_destroy(fec_rx_state_t *rx_state);
 
 #undef EXPORT
 
-#endif
+#endif // __MICRO_FEC_H__
