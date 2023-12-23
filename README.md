@@ -27,6 +27,7 @@ currently we support:
 N + K <= 2\*\*16 + 1  
 L needs to be even  
 N != 0 and K != 0  
+at least N packets needs to be received.  
   
 TODO: make pdf to explain the math.  
 
