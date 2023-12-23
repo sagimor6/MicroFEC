@@ -57,21 +57,27 @@ typedef struct {
 #endif
 } fec_rx_state_t;
 
+#ifdef _FEC_DO_EXPORTS
+#define EXPORT __attribute__((visibility("default")))
+#else
+#define EXPORT 
+#endif
 
+EXPORT bool fec_init(fec_state_t *state, fec_idx_t n, fec_idx_t k, size_t pak_len);
+EXPORT void fec_destroy(fec_state_t *state);
 
-bool fec_init(fec_state_t *state, fec_idx_t n, fec_idx_t k, size_t pak_len);
-void fec_destroy(fec_state_t *state);
+EXPORT bool fec_tx_init(fec_tx_state_t *tx_state, fec_state_t *state);
+EXPORT bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
+EXPORT bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak);
+EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
-bool fec_tx_init(fec_tx_state_t *tx_state, fec_state_t *state);
-bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
-bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak);
-void fec_tx_destroy(fec_tx_state_t *tx_state);
+EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state);
+EXPORT bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover);
+EXPORT bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state);
+EXPORT void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
+EXPORT void fec_rx_reset(fec_rx_state_t *rx_state);
+EXPORT void fec_rx_destroy(fec_rx_state_t *rx_state);
 
-bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state);
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover);
-bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state);
-void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
-void fec_rx_reset(fec_rx_state_t *rx_state);
-void fec_rx_destroy(fec_rx_state_t *rx_state);
+#undef EXPORT
 
 #endif
