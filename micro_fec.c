@@ -248,58 +248,74 @@ bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t id
 
 #ifndef FEC_LARGE_K
 
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover) {
+bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
     fec_int_t n = rx_state->state->n;
+    bool _can_recover;
+    bool _discard_pak = true;
 
     if (idx >= n + rx_state->state->k) {
         return false;
     }
 
-    if (idx < n) {
-        if (rx_state->info_paks[idx] == NULL) {
-            rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
-            rx_state->num_info++;
-        }
-    } else {
-        if (rx_state->redundancy_paks[idx - n] == NULL) {
-            rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
-            if (idx != n) {
-                bool has_one_row = (rx_state->redundancy_paks[0] != NULL);
-                rx_state->present_x[rx_state->num_redundant - has_one_row] = idx - 1;
-            }
-            rx_state->num_redundant++;
-        }
+    _can_recover = (rx_state->num_info + rx_state->num_redundant >= n);
+
+    if (_can_recover) {
+        goto valid_pak_end;
     }
 
-    if (can_recover) {
-        *can_recover = (rx_state->num_info + rx_state->num_redundant >= n);
+    if (idx < n) {
+        if (rx_state->info_paks[idx] != NULL) {
+            goto valid_pak_end;
+        }
+        rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
+        rx_state->num_info++;
+    } else {
+        if (rx_state->redundancy_paks[idx - n] != NULL) {
+            goto valid_pak_end;
+        }
+        rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
+        if (idx != n) {
+            bool has_one_row = (rx_state->redundancy_paks[0] != NULL);
+            rx_state->present_x[rx_state->num_redundant - has_one_row] = idx - 1;
+        }
+        rx_state->num_redundant++;
     }
+
+    _discard_pak = false;
+    _can_recover = (rx_state->num_info + rx_state->num_redundant >= n);
     
+valid_pak_end:
+    if (can_recover) {
+        *can_recover = _can_recover;
+    }
+    if (discard_pak) {
+        *discard_pak = _discard_pak;
+    }
     return true;
 }
 
 #else
 
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover) {
+bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
     fec_int_t n = rx_state->state->n;
+    bool _can_recover;
+    bool _discard_pak = true;
 
     if (idx >= n + rx_state->state->k) {
         return false;
     }
 
-    if (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) >= n) {
-        if (can_recover) {
-            *can_recover = true;
-        }
-        return true;
+    _can_recover = (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) >= n);
+
+    if (_can_recover) {
+        goto valid_pak_end;
     }
 
     if ((rx_state->received_paks_bitmap[idx / 8] & (1<<(idx & (8-1)))) != 0) {
-        if (can_recover) {
-            *can_recover = false;
-        }
-        return true; // already received
+        goto valid_pak_end; // already received
     }
+
+    _discard_pak = false;
 
     rx_state->received_paks_bitmap[idx / 8] |= (1<<(idx & (8-1)));
 
@@ -315,10 +331,15 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
         rx_state->num_redundant++;
     }
 
-    if (can_recover) {
-        *can_recover = (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) >= n);
-    }
+    _can_recover = (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) >= n);
 
+valid_pak_end:
+    if (can_recover) {
+        *can_recover = _can_recover;
+    }
+    if (discard_pak) {
+        *discard_pak = _discard_pak;
+    }
     return true;
 }
 

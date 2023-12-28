@@ -78,7 +78,7 @@ EXPORT bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t 
 EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
 EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state);
-EXPORT bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover);
+EXPORT bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak);
 EXPORT bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state);
 EXPORT void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
 EXPORT void fec_rx_reset(fec_rx_state_t *rx_state);

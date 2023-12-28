@@ -51,13 +51,13 @@ int main(void) {
         if (i == 0 || i == 2 || i == 1) {
             continue;
         }
-        fec_rx_add_pak(&rx_state, paks[i], i, NULL);
+        fec_rx_add_pak(&rx_state, paks[i], i, NULL, NULL);
     }
 
     TRACE("--4--\n");
 
     for (i = 0; i < sizeof(r_paks)/sizeof(r_paks[0]); i++) {
-        fec_rx_add_pak(&rx_state, r_paks[i], (sizeof(paks)/sizeof(paks[0])) + i, NULL);
+        fec_rx_add_pak(&rx_state, r_paks[i], (sizeof(paks)/sizeof(paks[0])) + i, NULL, NULL);
     }
 
     TRACE("--5--\n");
