@@ -1,8 +1,8 @@
 
 CC = gcc
 
-CFLAGS += -pedantic-errors -Wno-pedantic -Wall -Wextra -Wnull-dereference -Waggressive-loop-optimizations -Wstrict-overflow=5 -Wuninitialized -g
-CFLAGS += -DFEC_MIN_MEM
+CFLAGS += -pedantic-errors -Wno-pedantic -Wall -Wextra -Wnull-dereference -Waggressive-loop-optimizations -Wstrict-overflow=5 -Wuninitialized
+CFLAGS += -DFEC_MIN_MEM -DFEC_LARGE_K
 
 DEBUG_CFLAGS = -fsanitize=undefined -fsanitize=address -g
 

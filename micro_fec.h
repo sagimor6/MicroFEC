@@ -31,14 +31,20 @@ typedef struct {
 
 typedef struct {
     const fec_state_t* state;
+#ifndef FEC_LARGE_K
     unaligend_fec_int_t** info_paks; // size = n
     unaligend_fec_int_t** redundancy_paks; // size = real k
+    fec_int_t *present_x; // size = k - 1
+#else
+    uint8_t* received_paks_bitmap; // size = (n + real k)/8
+    unaligend_fec_int_t** pak_arr; // size = n
+    fec_int_t *pak_xy_arr; // size = n
+    unaligend_fec_int_t* ones_pak;
+#endif
     fec_idx_t num_info;
     fec_idx_t num_redundant;
 
-    // all use this:
     fec_int_t *missing_y; // size = k
-    fec_int_t *present_x; // size = k - 1
 
 #ifdef FEC_MIN_MEM
     // min mem uses this:
