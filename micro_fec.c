@@ -36,28 +36,42 @@ static fec_int_t poly_add(fec_int_t a, fec_int_t b) {
     return a ^ b;
 }
 
-static fec_int_t poly_shift_1(fec_int_t a) {
-    if ((a & (1<<(sizeof(fec_int_t)*8 - 1))) != 0) {
-        return poly_add((a << 1), POLY_G);
-    } else {
-        return (a << 1);
-    }
-}
-
 static fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
-    fec_int_t cur_bit = (1 << (sizeof(fec_int_t)*8 - 1));
+#if defined(__PCLMUL__) && defined(__SSE2__)
+    fec_int_t res;
+
+    asm(
+        ".intel_syntax noprefix\n"
+        "movd xmm0, %k[_a]\n"
+        "movd xmm1, %k[_b]\n"
+        "movd xmm2, %k[_poly]\n"
+        "PCLMULLQLQDQ xmm0, xmm1\n"
+        "movq xmm1, xmm0\n"
+        "PSRLD xmm1, %c[_shift]\n"
+        "PCLMULLQLQDQ xmm1, xmm2\n"
+        "XORPS xmm0, xmm1\n"
+        "PSRLD xmm1, %c[_shift]\n"
+        "PCLMULLQLQDQ xmm1, xmm2\n"
+        "XORPS xmm0, xmm1\n"
+        "movd %k[_out], xmm0\n"
+        ".att_syntax prefix\n"
+    : [_out] "=r" (res)
+    : [_a] "r" (a), [_b] "r" (b), [_poly] "r" (POLY_G), [_shift] "i" (sizeof(fec_int_t)*8)
+    : "xmm0", "xmm1", "xmm2"
+    );
+    return res;
+#else
     size_t i;
     fec_int_t res = 0;
 
     for (i = 0; i < sizeof(fec_int_t)*8; i++) {
-        res = poly_shift_1(res);
-        if ((b & cur_bit) != 0) {
-            res = poly_add(res, a);
-        }
-        cur_bit >>= 1;
+        res = poly_add((res << 1), POLY_G & (-(res >> (sizeof(fec_int_t)*8 - 1)))); // poly left shift 1
+        res = poly_add(res, a & (-(b >> (sizeof(fec_int_t)*8 - 1)))); // add a if current bit in b is 1
+        b <<= 1;
     }
 
     return res;
+#endif
 }
 
 static fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
