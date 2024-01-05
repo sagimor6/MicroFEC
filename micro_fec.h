@@ -8,6 +8,16 @@
 typedef uint16_t fec_int_t;
 typedef uint32_t fec_idx_t;
 
+#ifdef FEC_MIN_MEM
+#undef FEC_MIN_MEM
+#endif
+#ifdef FEC_LARGE_K
+#undef FEC_LARGE_K
+#endif
+
+#define FEC_LARGE_K
+#define FEC_MIN_MEM
+
 typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
 
 typedef struct {

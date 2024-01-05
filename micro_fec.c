@@ -1,9 +1,13 @@
 
+#include <emmintrin.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <time.h>
+#include <stdio.h>
 
 #include "micro_fec.h"
 
@@ -36,30 +40,89 @@ static fec_int_t poly_add(fec_int_t a, fec_int_t b) {
     return a ^ b;
 }
 
-static fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
-#if defined(__PCLMUL__) && defined(__SSE2__)
-    fec_int_t res;
+#include <immintrin.h>
 
-    asm(
-        ".intel_syntax noprefix\n"
-        "movd xmm0, %k[_a]\n"
-        "movd xmm1, %k[_b]\n"
-        "movd xmm2, %k[_poly]\n"
-        "PCLMULLQLQDQ xmm0, xmm1\n"
-        "movq xmm1, xmm0\n"
-        "PSRLD xmm1, %c[_shift]\n"
-        "PCLMULLQLQDQ xmm1, xmm2\n"
-        "XORPS xmm0, xmm1\n"
-        "PSRLD xmm1, %c[_shift]\n"
-        "PCLMULLQLQDQ xmm1, xmm2\n"
-        "XORPS xmm0, xmm1\n"
-        "movd %k[_out], xmm0\n"
-        ".att_syntax prefix\n"
-    : [_out] "=r" (res)
-    : [_a] "r" (a), [_b] "r" (b), [_poly] "r" (POLY_G), [_shift] "i" (sizeof(fec_int_t)*8)
-    : "xmm0", "xmm1", "xmm2"
-    );
-    return res;
+typedef uint8_t u8x16 __attribute__ ((vector_size (16)));
+typedef uint16_t u16x8 __attribute__ ((vector_size (16)));
+typedef uint32_t  u32x4 __attribute__ ((vector_size (16)));
+typedef uint64_t  u64x2 __attribute__ ((vector_size (16)));
+
+typedef uint8_t u8x32 __attribute__ ((vector_size (32)));
+typedef uint16_t u16x16 __attribute__ ((vector_size (32)));
+typedef uint32_t  u32x8 __attribute__ ((vector_size (32)));
+typedef uint64_t  u64x4 __attribute__ ((vector_size (32)));
+
+typedef union {
+        __m128i mm;
+        u8x16   u8;
+        u16x8   u16;
+        u32x4   u32;
+        u64x2   u64;
+} v128;
+
+static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul(fec_int_t a, fec_int_t b) {
+#if defined(__PCLMUL__) && defined(__SSE2__)
+    // uint32_t res;
+
+    // asm(
+    //     ".intel_syntax noprefix\n"
+    //     "movd xmm0, %k[_a]\n"
+    //     "movd xmm1, %k[_b]\n"
+    //     "movd xmm2, %k[_poly]\n"
+    //     "PCLMULLQLQDQ xmm0, xmm1\n"
+    //     "movq xmm1, xmm0\n"
+    //     "PSRLD xmm1, %c[_shift]\n"
+    //     "PCLMULLQLQDQ xmm1, xmm2\n"
+    //     "XORPS xmm0, xmm1\n"
+    //     "PSRLD xmm1, %c[_shift]\n"
+    //     "PCLMULLQLQDQ xmm1, xmm2\n"
+    //     "XORPS xmm0, xmm1\n"
+    //     "movd %k[_out], xmm0\n"
+    //     ".att_syntax prefix\n"
+    // : [_out] "=r" (res)
+    // : [_a] "r" ((uint32_t)a), [_b] "r" ((uint32_t)b), [_poly] "r" ((uint32_t)POLY_G), [_shift] "i" (sizeof(fec_int_t)*8)
+    // : "xmm0", "xmm1", "xmm2"
+    // );
+    // return (fec_int_t)res;
+
+
+    // v128 _a;
+    // _a.u64[0] = a;
+    // v128 _b;
+    // _b.u64[0] = b;
+    // v128 _poly;
+    // _poly.u64[0] = POLY_G;
+
+    // v128 _c;
+    // _c.mm = _mm_clmulepi64_si128(_a.mm, _b.mm, 0);
+    // v128 _d;
+    // _d.u32 = (_c.u32 >> 16);
+    // _d.mm = _mm_clmulepi64_si128(_d.mm, _poly.mm, 0);
+    // _c.u16 ^= _d.u16;
+    // _d.u32 = _d.u32 >> 16;
+    // _d.mm = _mm_clmulepi64_si128(_d.mm, _poly.mm, 0);
+    // _c.u16 ^= _d.u16;
+    // return _c.u16[0];
+
+    u64x2 _a;
+    _a[0] = a;
+    u64x2 _b;
+    _b[0] = b;
+    u64x2 _poly;
+    _poly[0] = POLY_G;
+
+    u16x8 _c;
+    _c = (u16x8)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+    u32x4 _d;
+    _d = (((u32x4)_c) >> 16);
+    _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    _c ^= (u16x8)_d;
+    _d >>= 16;
+    _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    _c ^= (u16x8)_d;
+    return _c[0];
+
+#elif defined(__PMULL__)
 #else
     size_t i;
     fec_int_t res = 0;
@@ -72,6 +135,83 @@ static fec_int_t poly_mul(fec_int_t a, fec_int_t b) {
 
     return res;
 #endif
+}
+
+static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4(uint64_t a, uint64_t b) {
+    size_t i;
+    uint64_t res = 0;
+    uint64_t shift_mask = (1ULL<<16) | (1ULL<<32) | (1ULL<<48);
+    const uint64_t msb_mask = (1ULL<<(15+16*0)) | (1ULL<<(15+16*1)) | (1ULL<<(15+16*2)) | (1ULL<<(15+16*3));
+    const uint64_t poly_g = (msb_mask >> 15) * POLY_G;
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        uint64_t shifted_res = (res << 1) & (~shift_mask);
+        uint64_t res_msbs = (res & msb_mask);
+        res = shifted_res ^ (((res_msbs << 1) - (res_msbs >> 15)) & poly_g); // poly left shift 1
+        uint64_t b_msbs = b & msb_mask;
+        res ^= (((b_msbs << 1) - (b_msbs >> 15)) & a); // add a if current bit in b is 1
+        b <<= 1;
+        b &= (~shift_mask);
+    }
+
+    return res;
+}
+
+static u16x8 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul8(u16x8 a, u16x8 b) {
+    size_t i;
+    u16x8 res = {0};
+    u16x8 poly_g = {POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G};
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        res = (res << 1) ^ (poly_g & (-(res >> 15))); // poly left shift 1
+        res ^= a & (-(b >> 15)); // add a if current bit in b is 1
+        b <<= 1;
+    }
+
+    return res;
+}
+
+static u16x16 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul16(u16x16 a, u16x16 b) {
+    size_t i;
+    u16x16 res = {0};
+    u16x16 poly_g = {POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,
+                    POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G};
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        res = (res << 1) ^ (poly_g & (-(res >> 15))); // poly left shift 1
+        res ^= a & (-(b >> 15)); // add a if current bit in b is 1
+        b <<= 1;
+    }
+
+    return res;
+}
+
+static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2(fec_int_t a1, fec_int_t a2, fec_int_t b1, fec_int_t b2) {
+    u64x2 _a;
+    _a[0] = a1 | ((uint64_t)a2<<32);
+    u64x2 _b;
+    _b[0] = b1 | ((uint64_t)b2<<32);
+    u64x2 _poly;
+    _poly[0] = POLY_G | ((uint64_t)POLY_G<<32);
+
+    u16x8 _c;
+    u32x4 _c2;
+    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+    _c2[1] = _c2[2];
+    _c = (u16x8)_c2;
+    u32x4 _d;
+    _d = (_c2 >> 16);
+    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    _c2[1] = _c2[2];
+    _d = _c2;
+    _c ^= (u16x8)_d;
+    _d >>= 16;
+    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    _c2[1] = _c2[2];
+    _d = _c2;
+    _c ^= (u16x8)_d;
+    
+    return _c[0] | ((uint32_t)_c[2]) << 16;
 }
 
 static fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
@@ -378,17 +518,39 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
         }
     }
 
-    for (j = 0; j < pak_len; j++) {
-        fec_int_t res = 0;
+    // for (j = 0; j < pak_len; j++) {
+    //     fec_int_t res = 0;
+    //     for (i = 0; i < n; i++) {
+    //         if(idx == 0) {
+    //             res = poly_add(res, tx_state->paks[i][j]);
+    //         } else {
+    //             fec_int_t a_i = poly_add(n + idx - 1, i);
+    //             res = poly_add(res, poly_mul(tx_state->paks[i][j], _fec_inv(state, a_i)));
+    //         }
+    //     }
+    //     out_pak[j] = res;
+    // }
+
+    if (idx == 0) {
         for (i = 0; i < n; i++) {
-            if(idx == 0) {
-                res = poly_add(res, tx_state->paks[i][j]);
-            } else {
-                fec_int_t a_i = poly_add(n + idx - 1, i);
-                res = poly_add(res, poly_mul(tx_state->paks[i][j], _fec_inv(state, a_i)));
+            const unaligend_fec_int_t* pak = tx_state->paks[i];
+            for (j = 0; j < pak_len; j++) {
+                out_pak[j] = poly_add(out_pak[j], pak[j]);
             }
         }
-        out_pak[j] = res;
+        return true;
+    }
+
+    for (i = 0; i < n; i++) {
+        fec_int_t a_i = _fec_inv(state, poly_add(n + idx - 1, i));
+        const unaligend_fec_int_t* pak = tx_state->paks[i];
+        for (j = 0; j < pak_len; j++) {
+            // if (idx == 0) {
+            //     out_pak[j] = poly_add(out_pak[j], pak[j]);
+            // } else {
+                out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
+            // }
+        }
     }
 
     return true;
@@ -842,21 +1004,242 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 
 #else
 
+
+// void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize(3)))*/ __attribute__((aligned(16))) __tmp_func3(fec_int_t* tmp_recovered_ints, const fec_int_t *missing_y, const fec_int_t* inv_arr, fec_int_t a, fec_int_t y_j, fec_idx_t i) {
+//     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y[i])]);
+// }
+
+void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize("Os,rename-registers")))*/ __attribute__((aligned(16))) __tmp_func2(fec_int_t* tmp_recovered_ints, const fec_int_t *missing_y, const fec_int_t* inv_arr, fec_int_t a, fec_int_t y_j, fec_idx_t num_y_missing) {
+    // fec_idx_t i;
+    // for (i = 0; i < num_y_missing; i++) {
+    //     fec_int_t missing_y_i = missing_y[i];
+    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
+    //     //__tmp_func3(tmp_recovered_ints, missing_y, inv_arr, a, y_j, i);
+    // }
+
+    fec_idx_t i;
+    uint64_t aa = ((uint64_t)a << 0) | ((uint64_t)a << 16) | ((uint64_t)a << 32) | ((uint64_t)a << 48);
+    for (i = 0; i < num_y_missing; i+=4) {
+        uint64_t bb = inv_arr[poly_add(y_j, missing_y[i])];
+        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+1])]) << 16;
+        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+2])]) << 32;
+        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+3])]) << 48;
+        uint64_t cc = poly_mul4(aa, bb);
+        *((uint64_t*)&tmp_recovered_ints[i]) ^= cc;
+        // tmp_recovered_ints[i+0] ^= (uint16_t)(cc >> 0);
+        // tmp_recovered_ints[i+1] ^= (uint16_t)(cc >> 16);
+        // tmp_recovered_ints[i+2] ^= (uint16_t)(cc >> 32);
+        // tmp_recovered_ints[i+3] ^= (uint16_t)(cc >> 48);
+    }
+
+    // for (i = (num_y_missing/4)*4; i < num_y_missing; i++) {
+    //     fec_int_t missing_y_i = missing_y[i];
+    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
+    // }
+
+    // fec_idx_t i;
+    // u16x8 aa = {a,a,a,a,a,a,a,a};
+    // union {
+    //     uint16_t __attribute__((aligned(16))) tmp_arr[8];
+    //     u16x8 _bb;
+    // } u;
+    
+    // for (i = 0; i < num_y_missing; i+=8) {
+    //     u16x8 bb;
+
+    //     // bb = (u16x8)_mm_loadu_si128((__m128i_u*)&missing_y[i]);
+    //     // bb ^= y_j;
+    //     // bb[0] = inv_arr[bb[0]];
+    //     // bb[1] = inv_arr[bb[1]];
+    //     // bb[2] = inv_arr[bb[2]];
+    //     // bb[3] = inv_arr[bb[3]];
+    //     // bb[4] = inv_arr[bb[4]];
+    //     // bb[5] = inv_arr[bb[5]];
+    //     // bb[6] = inv_arr[bb[6]];
+    //     // bb[7] = inv_arr[bb[7]];
+
+    //     // int j;
+    //     // for(j = 0; j < 8; j++) {
+    //     //     bb[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
+    //     // }
+
+    //     // int j;
+    //     // for(j = 0; j < 8; j++) {
+    //     //     u.tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
+    //     // }
+    //     // bb = u._bb;
+    //     uint16_t __attribute__((aligned(16))) tmp_arr[8];
+    //     int j;
+    //     for(j = 0; j < 8; j++) {
+    //         tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
+    //     }
+    //     bb = (u16x8)_mm_load_si128((__m128i*)tmp_arr);
+
+    //     // bb[0] = inv_arr[poly_add(y_j, missing_y[i+0])];
+    //     // bb[1] = inv_arr[poly_add(y_j, missing_y[i+1])];
+    //     // bb[2] = inv_arr[poly_add(y_j, missing_y[i+2])];
+    //     // bb[3] = inv_arr[poly_add(y_j, missing_y[i+3])];
+    //     // bb[4] = inv_arr[poly_add(y_j, missing_y[i+4])];
+    //     // bb[5] = inv_arr[poly_add(y_j, missing_y[i+5])];
+    //     // bb[6] = inv_arr[poly_add(y_j, missing_y[i+6])];
+    //     // bb[7] = inv_arr[poly_add(y_j, missing_y[i+7])];
+    //     u16x8 cc = poly_mul8(aa, bb);
+
+    //     _mm_storeu_si128((__m128i_u*)&tmp_recovered_ints[i],  (__m128i)((u16x8)_mm_loadu_si128((__m128i_u*)&tmp_recovered_ints[i]) ^ cc));
+
+    //     // tmp_recovered_ints[i+0] ^= cc[0];
+    //     // tmp_recovered_ints[i+1] ^= cc[1];
+    //     // tmp_recovered_ints[i+2] ^= cc[2];
+    //     // tmp_recovered_ints[i+3] ^= cc[3];
+    //     // tmp_recovered_ints[i+4] ^= cc[4];
+    //     // tmp_recovered_ints[i+5] ^= cc[5];
+    //     // tmp_recovered_ints[i+6] ^= cc[6];
+    //     // tmp_recovered_ints[i+7] ^= cc[7];
+    // }
+
+    // for (i = (num_y_missing/8)*8; i < num_y_missing; i++) {
+    //     fec_int_t missing_y_i = missing_y[i];
+    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
+    // }
+
+    // fec_idx_t i;
+    // u16x16 aa = {a,a,a,a,a,a,a,a,
+    //             a,a,a,a,a,a,a,a};
+    // for (i = 0; i < num_y_missing; i+=16) {
+    //     u16x16 bb;
+
+    //     // int j;
+    //     // for(j = 0; j < 16; j++) {
+    //     //     bb[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
+    //     // }
+
+    //     uint16_t __attribute__((aligned(32))) tmp_arr[16];
+    //     int j;
+    //     for(j = 0; j < 16; j++) {
+    //         tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
+    //     }
+    //     bb = (u16x16)_mm256_load_si256((__m256i*)tmp_arr);
+        
+
+    //     // bb[0] = inv_arr[poly_add(y_j, missing_y[i+0])];
+    //     // bb[1] = inv_arr[poly_add(y_j, missing_y[i+1])];
+    //     // bb[2] = inv_arr[poly_add(y_j, missing_y[i+2])];
+    //     // bb[3] = inv_arr[poly_add(y_j, missing_y[i+3])];
+    //     // bb[4] = inv_arr[poly_add(y_j, missing_y[i+4])];
+    //     // bb[5] = inv_arr[poly_add(y_j, missing_y[i+5])];
+    //     // bb[6] = inv_arr[poly_add(y_j, missing_y[i+6])];
+    //     // bb[7] = inv_arr[poly_add(y_j, missing_y[i+7])];
+    //     // bb[8] = inv_arr[poly_add(y_j, missing_y[i+8])];
+    //     // bb[9] = inv_arr[poly_add(y_j, missing_y[i+9])];
+    //     // bb[10] = inv_arr[poly_add(y_j, missing_y[i+10])];
+    //     // bb[11] = inv_arr[poly_add(y_j, missing_y[i+11])];
+    //     // bb[12] = inv_arr[poly_add(y_j, missing_y[i+12])];
+    //     // bb[13] = inv_arr[poly_add(y_j, missing_y[i+13])];
+    //     // bb[14] = inv_arr[poly_add(y_j, missing_y[i+14])];
+    //     // bb[15] = inv_arr[poly_add(y_j, missing_y[i+15])];
+    //     u16x16 cc = poly_mul16(aa, bb);
+
+    //     _mm256_storeu_si256((__m256i_u*)&tmp_recovered_ints[i],  (__m256i)((u16x16)_mm256_loadu_si256((__m256i_u*)&tmp_recovered_ints[i]) ^ cc));
+
+    //     // tmp_recovered_ints[i+0] ^= cc[0];
+    //     // tmp_recovered_ints[i+1] ^= cc[1];
+    //     // tmp_recovered_ints[i+2] ^= cc[2];
+    //     // tmp_recovered_ints[i+3] ^= cc[3];
+    //     // tmp_recovered_ints[i+4] ^= cc[4];
+    //     // tmp_recovered_ints[i+5] ^= cc[5];
+    //     // tmp_recovered_ints[i+6] ^= cc[6];
+    //     // tmp_recovered_ints[i+7] ^= cc[7];
+    //     // tmp_recovered_ints[i+8] ^= cc[8];
+    //     // tmp_recovered_ints[i+9] ^= cc[9];
+    //     // tmp_recovered_ints[i+10] ^= cc[10];
+    //     // tmp_recovered_ints[i+11] ^= cc[11];
+    //     // tmp_recovered_ints[i+12] ^= cc[12];
+    //     // tmp_recovered_ints[i+13] ^= cc[13];
+    //     // tmp_recovered_ints[i+14] ^= cc[14];
+    //     // tmp_recovered_ints[i+15] ^= cc[15];
+    // }
+
+    // for (i = (num_y_missing/16)*16; i < num_y_missing; i++) {
+    //     fec_int_t missing_y_i = missing_y[i];
+    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
+    // }
+
+    // fec_idx_t i;
+    // for (i = 0; i < num_y_missing; i += 2) {
+    //     uint32_t cc = poly_mul2(a, a, inv_arr[poly_add(y_j, missing_y[i+0])], inv_arr[poly_add(y_j, missing_y[i+1])]);
+
+    //     *((uint32_t*)&tmp_recovered_ints[i]) ^= cc;
+    // }
+    
+}
+
+void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize(3)))*/ __attribute__((aligned(16))) __tmp_func(const fec_rx_state_t *rx_state) {
+    const fec_state_t *state = rx_state->state;
+    fec_idx_t n = state->n;
+    size_t pak_len = state->pak_len;
+
+    fec_idx_t num_y_missing = n - rx_state->num_info;
+    fec_int_t *present_y;
+    fec_int_t *missing_y;
+    unaligend_fec_int_t** y_pak_arr;
+    fec_idx_t num_y_present = rx_state->num_info;
+
+    fec_idx_t i=0, j;
+    fec_idx_t y_j;
+    size_t ii;
+    i = i;
+
+    present_y = rx_state->pak_xy_arr;
+    missing_y = rx_state->missing_y;
+    y_pak_arr = rx_state->pak_arr;
+
+    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+
+    const fec_int_t* inv_arr = state->inv_arr - 1;
+
+    for (ii = 0; ii < pak_len; ii++) {         
+        for (j = 0; j < num_y_present; j++) {
+            y_j = present_y[j];
+            fec_int_t y_pak_arr_j_ii = y_pak_arr[j][ii];
+            // for (i = 0; i < num_y_missing; i++) {
+            //     fec_int_t missing_y_i = missing_y[i];
+            //     tmp_recovered_ints[i] ^= poly_mul(y_pak_arr_j_ii, inv_arr[poly_add(y_j, missing_y_i)]);
+            // }
+            __tmp_func2(tmp_recovered_ints, missing_y, inv_arr, y_pak_arr_j_ii, y_j, num_y_missing);
+        }
+    }
+}
+
+
+static uint64_t get_timestamp() {
+    struct timespec tp = {0};
+    //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
+    return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
+}
+
 bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
     fec_idx_t n = state->n;
     size_t pak_len = state->pak_len;
 
     fec_idx_t num_y_missing = n - rx_state->num_info;
-    bool has_one_row;
-    fec_idx_t num_x_present = 0;
+    bool has_one_row = (rx_state->ones_pak != NULL);
+    fec_idx_t num_x_present;
     fec_int_t *present_x;
+    fec_int_t *present_y;
+    fec_int_t *missing_y;
+    unaligend_fec_int_t** x_pak_arr;
+    unaligend_fec_int_t** y_pak_arr;
+    fec_idx_t num_y_present = rx_state->num_info;
 
     fec_idx_t i, j;
     fec_idx_t y_i, y_j;
     size_t ii;
 
-    if (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) < n) {
+    uint64_t start_time, end_time;
+
+    if (rx_state->num_info + rx_state->num_redundant + has_one_row < n) {
         return false;
     }
 
@@ -864,37 +1247,50 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         return true;
     }
 
-    has_one_row = (rx_state->ones_pak != NULL);
     num_x_present = num_y_missing - has_one_row;
 
     present_x = &rx_state->pak_xy_arr[n - num_x_present];
+    present_y = rx_state->pak_xy_arr;
+    missing_y = rx_state->missing_y;
+    x_pak_arr = &rx_state->pak_arr[n - num_x_present];
+    y_pak_arr = rx_state->pak_arr;
+
+    start_time = get_timestamp();
 
     for (y_i = 0, i = 0; i < num_y_missing; y_i++) {
         if ((rx_state->received_paks_bitmap[y_i / 8] & (1<<(y_i & (8-1)))) == 0) {
-            rx_state->missing_y[i] = y_i;
+            missing_y[i] = y_i;
             i++;
         }
     }
 
-    for (i = 0; i < rx_state->num_info; i++) {
-        y_i = rx_state->pak_xy_arr[i];
+    end_time = get_timestamp();
+    printf("---1.1--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+
+    for (i = 0; i < num_y_present; i++) {
+        y_i = present_y[i];
 
         fec_int_t pi_ycomp_y_div_ycomp_x_i = 1;
         for (j = 0; j < num_y_missing; j++) {
-            pi_ycomp_y_div_ycomp_x_i = poly_mul(pi_ycomp_y_div_ycomp_x_i, poly_add(y_i, rx_state->missing_y[j]));
+            pi_ycomp_y_div_ycomp_x_i = poly_mul(pi_ycomp_y_div_ycomp_x_i, poly_add(y_i, missing_y[j]));
         }
         for (j = 0; j < num_x_present; j++) {
             pi_ycomp_y_div_ycomp_x_i = poly_mul(pi_ycomp_y_div_ycomp_x_i, _fec_inv(state, poly_add(y_i, present_x[j])));
         }
         for (ii = 0; ii < pak_len; ii++) {
-            rx_state->pak_arr[i][ii] = poly_mul(rx_state->pak_arr[i][ii], pi_ycomp_y_div_ycomp_x_i);
+            y_pak_arr[i][ii] = poly_mul(y_pak_arr[i][ii], pi_ycomp_y_div_ycomp_x_i);
         }
     }
+
+    end_time = get_timestamp();
+    printf("---1.2--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
 
     for (i = 0; i < num_x_present; i++) {
         fec_int_t pi_xy_div_xx_i = 1;
         for (j = 0; j < num_y_missing; j++) {
-            pi_xy_div_xx_i = poly_mul(pi_xy_div_xx_i, poly_add(present_x[i], rx_state->missing_y[j]));
+            pi_xy_div_xx_i = poly_mul(pi_xy_div_xx_i, poly_add(present_x[i], missing_y[j]));
         }
         for (j = 0; j < num_x_present; j++) {
             if(j == i) {
@@ -903,77 +1299,134 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
             pi_xy_div_xx_i = poly_mul(pi_xy_div_xx_i, _fec_inv(state, poly_add(present_x[i], present_x[j])));
         }
 
-        unaligend_fec_int_t *pak = rx_state->pak_arr[n - num_x_present + i];
+        unaligend_fec_int_t *pak = x_pak_arr[i];
         for (ii = 0; ii < pak_len; ii++) {
             pak[ii] = poly_mul(pak[ii], pi_xy_div_xx_i);
         }
     }
 
+    end_time = get_timestamp();
+    printf("---1.3--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+
+    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+
     for (ii = 0; ii < pak_len; ii++) {
-        fec_int_t res;
+        
+
+        fec_int_t ones_pak_ii = 0;
+        if (has_one_row) {
+            ones_pak_ii = rx_state->ones_pak[ii];
+        }
+
+        // for (i = 0; i < num_y_missing; i++) {
+
+        //     fec_int_t res;
+
+        //     res = ones_pak_ii;
+
+        //     fec_int_t missing_y_i = missing_y[i];
+
+        //     for (j = 0; j < num_y_present; j++) {
+        //         y_j = present_y[j];
+        //         res = poly_add(res, poly_mul(y_pak_arr[j][ii], _fec_inv(state, poly_add(y_j, missing_y_i))));
+        //     }
+        //     for(j = 0; j < num_x_present; j++) {
+        //         res = poly_add(res, poly_mul(x_pak_arr[j][ii], _fec_inv(state, poly_add(present_x[j], missing_y_i))));
+        //     }
+
+        //     tmp_recovered_ints[i] = res;
+        // }
 
         for (i = 0; i < num_y_missing; i++) {
+            tmp_recovered_ints[i] = ones_pak_ii;
+        }            
 
-            res = 0;
-
-            for (j = 0; j < rx_state->num_info; j++) {
-                y_j = rx_state->pak_xy_arr[j];
-                res = poly_add(res, poly_mul(rx_state->pak_arr[j][ii], _fec_inv(state, poly_add(y_j, rx_state->missing_y[i]))));
+        for (j = 0; j < num_y_present; j++) {
+            y_j = present_y[j];
+            fec_int_t y_pak_arr_j_ii = y_pak_arr[j][ii];
+            for (i = 0; i < num_y_missing; i++) {
+                fec_int_t missing_y_i = missing_y[i];
+                tmp_recovered_ints[i] ^= poly_mul(y_pak_arr_j_ii, _fec_inv(state, poly_add(y_j, missing_y_i)));
             }
-            if (has_one_row) {
-                res = poly_add(res, rx_state->ones_pak[ii]);
+        }
+        for(j = 0; j < num_x_present; j++) {
+            fec_int_t x_j = present_x[j];
+            fec_int_t x_pak_arr_j_ii = x_pak_arr[j][ii];
+            for (i = 0; i < num_y_missing; i++) {
+                fec_int_t missing_y_i = missing_y[i];
+                tmp_recovered_ints[i] ^= poly_mul(x_pak_arr_j_ii, _fec_inv(state, poly_add(x_j, missing_y_i)));
             }
-            for(j = 0; j < num_x_present; j++) {
-                res = poly_add(res, poly_mul(rx_state->pak_arr[n - num_x_present + j][ii], _fec_inv(state, poly_add(present_x[j], rx_state->missing_y[i]))));
-            }
-
-            rx_state->tmp_recovered_ints[i] = res;
         }
 
         for (i = 0; i < num_y_missing; i++) {
             if (i == 0 && has_one_row) {
-                rx_state->ones_pak[ii] = rx_state->tmp_recovered_ints[i];
+                rx_state->ones_pak[ii] = tmp_recovered_ints[i];
             } else {
-                rx_state->pak_arr[n - num_x_present + i - has_one_row][ii] = rx_state->tmp_recovered_ints[i];
+                x_pak_arr[i - has_one_row][ii] = tmp_recovered_ints[i];
             }
         }
     }
 
+    end_time = get_timestamp();
+    printf("---1.4--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+
     for (i = 0; i < num_y_missing; i++) {
         fec_int_t pi_yx_div_yy_i = 1;
         for (j = 0; j < num_x_present; j++) {
-            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, poly_add(rx_state->missing_y[i], present_x[j]));
+            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, poly_add(missing_y[i], present_x[j]));
         }
         for (j = 0; j < num_y_missing; j++) {
             if(j == i) {
                 continue;
             }
-            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, _fec_inv(state, poly_add(rx_state->missing_y[i], rx_state->missing_y[j])));
+            pi_yx_div_yy_i = poly_mul(pi_yx_div_yy_i, _fec_inv(state, poly_add(missing_y[i], missing_y[j])));
         }
 
         for (ii = 0; ii < pak_len; ii++) {
             if (i == 0 && has_one_row) {
                 rx_state->ones_pak[ii] = poly_mul(rx_state->ones_pak[ii], pi_yx_div_yy_i);
             } else {
-                rx_state->pak_arr[n - num_x_present + i - has_one_row][ii] = poly_mul(rx_state->pak_arr[n - num_x_present + i - has_one_row][ii], pi_yx_div_yy_i);
+                x_pak_arr[i - has_one_row][ii] = poly_mul(x_pak_arr[i - has_one_row][ii], pi_yx_div_yy_i);
             }
         }
     }
 
-    for (i = 0; i < rx_state->num_info; i++) {
-        y_i = rx_state->pak_xy_arr[i];
+    end_time = get_timestamp();
+    printf("---1.5--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+
+    for (i = 0; i < num_y_present; i++) {
+        y_i = present_y[i];
 
         fec_int_t inv_pi_ycomp_y_div_ycomp_x_i = 1;
         for (j = 0; j < num_y_missing; j++) {
-            inv_pi_ycomp_y_div_ycomp_x_i = poly_mul(inv_pi_ycomp_y_div_ycomp_x_i, _fec_inv(state, poly_add(y_i, rx_state->missing_y[j])));
+            inv_pi_ycomp_y_div_ycomp_x_i = poly_mul(inv_pi_ycomp_y_div_ycomp_x_i, _fec_inv(state, poly_add(y_i, missing_y[j])));
         }
         for (j = 0; j < num_x_present; j++) {
             inv_pi_ycomp_y_div_ycomp_x_i = poly_mul(inv_pi_ycomp_y_div_ycomp_x_i,  poly_add(y_i, present_x[j]));
         }
         for (ii = 0; ii < pak_len; ii++) {
-            rx_state->pak_arr[i][ii] = poly_mul(rx_state->pak_arr[i][ii], inv_pi_ycomp_y_div_ycomp_x_i);
+            y_pak_arr[i][ii] = poly_mul(y_pak_arr[i][ii], inv_pi_ycomp_y_div_ycomp_x_i);
         }
     }
+
+    end_time = get_timestamp();
+    printf("---1.6--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+
+    __tmp_func(rx_state);
+
+    // {
+    //     uint16_t aaa = rand();
+    //     uint16_t bbb = rand();
+    //     for(i = 0; i < n*pak_len*num_y_missing; i++) {
+    //         aaa = poly_mul(aaa, bbb);
+    //         bbb = aaa ^ bbb;
+    //     }
+    //     printf("---%d---\n", aaa);
+    // }
 
     if (has_one_row) {
         rx_state->pak_xy_arr[n - num_x_present - 1] = rx_state->missing_y[0];
@@ -1002,6 +1455,10 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
             }
         }
     }
+
+    end_time = get_timestamp();
+    printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
 
     return true;
 }

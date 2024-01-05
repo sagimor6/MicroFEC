@@ -8,8 +8,10 @@ CFLAGS += -DFEC_MIN_MEM -DFEC_LARGE_K
 DEBUG_CFLAGS += -g
 #DEBUG_CFLAGS += -fsanitize=undefined -fsanitize=address 
 
-OPT_CFLAGS += -flto -ffat-lto-objects -ffunction-sections -fdata-sections -Os -fvisibility=hidden -s
+OPT_CFLAGS += -flto -ffat-lto-objects -ffunction-sections -fdata-sections -O2 -fvisibility=hidden
 OPT_CFLAGS += -mpclmul
+OPT_CFLAGS += -mavx2
+OPT_CFLAGS += -mavx
 OPT_LDFLAGS = -Wl,--gc-sections
 
 BUILD = build
