@@ -63,6 +63,7 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 
 #if (defined(__PCLMUL__) && defined(__SSE2__)) || defined(_FEC_NO_OPT) || !(defined(__x86_64__) || defined(__i386__))
 #define _FEC_USE_POLY_MUL
+//#define _FEC_USE_POLY_MUL_CLMUL2
 #elif defined(__AVX2__)
 #define _FEC_USE_POLY_MUL16
 #elif defined(__SSE2__)
@@ -79,7 +80,7 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 
 #define ALIGN_UP(val, align) (((val) + (align) - 1) & (-((__typeof__(val))(align))))
 
-#if defined(_FEC_USE_POLY_MUL)
+#if defined(_FEC_USE_POLY_MUL) || defined(_FEC_USE_POLY_MUL_CLMUL2)
 #define _FEC_ALIGN_SIZE_VAL sizeof(fec_int_t)
 #elif defined(_FEC_USE_POLY_MUL16)
 #define _FEC_ALIGN_SIZE_VAL 32
@@ -284,26 +285,40 @@ static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2
     u64x2 _b;
     _b[0] = b1 | ((uint64_t)b2<<32);
     u64x2 _poly;
-    _poly[0] = POLY_G | ((uint64_t)POLY_G<<32);
+    _poly[0] = POLY_G;
 
     u16x8 _c;
-    u32x4 _c2;
-    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
-    _c2[1] = _c2[2];
-    _c = (u16x8)_c2;
+    _c = (u16x8)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+    _c = (u16x8)_mm_shuffle_epi32((__m128i)_c, _MM_SHUFFLE(3, 2, 2, 0));
     u32x4 _d;
-    _d = (_c2 >> 16);
-    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-    _c2[1] = _c2[2];
-    _d = _c2;
+    _d = (((u32x4)_c) >> 16);
+    _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
     _c ^= (u16x8)_d;
     _d >>= 16;
-    _c2 = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-    _c2[1] = _c2[2];
-    _d = _c2;
+    _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
     _c ^= (u16x8)_d;
     
     return _c[0] | ((uint32_t)_c[2]) << 16;
+
+    // u64x2 _a;
+    // _a[0] = a1;
+    // a2 = a2;
+    // u64x2 _b;
+    // _b[0] = b1 | ((uint64_t)b2<<32);
+    // u64x2 _poly;
+    // _poly[0] = POLY_G;
+
+    // u16x8 _c;
+    // _c = (u16x8)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+    // u32x4 _d;
+    // _d = (((u32x4)_c) >> 16);
+    // _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    // _c ^= (u16x8)_d;
+    // _d >>= 16;
+    // _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+    // _c ^= (u16x8)_d;
+    
+    // return _c[0] | ((uint32_t)_c[2]) << 16;
 }
 #endif
 
@@ -1278,6 +1293,15 @@ void __attribute__((noinline)) __attribute__((visibility("default"))) __attribut
         *((uint32_t*)&recovered[i]) ^= cc;
     }
 
+#elif defined(_FEC_USE_POLY_MUL_CLMUL2)
+    fec_idx_t i;
+    for (i = 0; i < num_y_missing-1; i+=2) {
+        uint32_t cc = poly_mul2(pak_val, pak_val, inv_arr[poly_add(pak_xy, missing_y[i])], inv_arr[poly_add(pak_xy, missing_y[i+1])]);
+        *((uint32_t*)&recovered[i]) ^= cc;
+    }
+    if (i != num_y_missing) {
+        recovered[i] ^= poly_mul(pak_val, inv_arr[poly_add(pak_xy, missing_y[i])]);
+    }
 #else
 #error all cases should be covered
 #endif
