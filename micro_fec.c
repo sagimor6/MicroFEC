@@ -1,5 +1,4 @@
 
-#include <emmintrin.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -40,6 +39,7 @@ static fec_int_t poly_add(fec_int_t a, fec_int_t b) {
     return a ^ b;
 }
 
+#if defined(__x86_64__) || defined (__i386__)
 #include <immintrin.h>
 
 typedef uint8_t u8x16 __attribute__ ((vector_size (16)));
@@ -52,36 +52,56 @@ typedef uint16_t u16x16 __attribute__ ((vector_size (32)));
 typedef uint32_t  u32x8 __attribute__ ((vector_size (32)));
 typedef uint64_t  u64x4 __attribute__ ((vector_size (32)));
 
-typedef union {
-        __m128i mm;
-        u8x16   u8;
-        u16x8   u16;
-        u32x4   u32;
-        u64x2   u64;
-} v128;
+#elif defined(__arm__) || defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#if (defined(__PCLMUL__) && defined(__SSE2__)) || defined(_FEC_NO_OPT) || !(defined(__x86_64__) || defined(__i386__))
+#define _FEC_USE_POLY_MUL
+#elif defined(__AVX2__)
+#define _FEC_USE_POLY_MUL16
+#elif defined(__SSE2__)
+#define _FEC_USE_POLY_MUL8
+#elif defined(__x86_64__)
+#define _FEC_USE_POLY_MUL4
+#elif defined(__i386__)
+#define _FEC_USE_POLY_MUL2
+#endif
+
+#define ALIGN_UP(val, align) (((val) + (align) - 1) & (-((__typeof__(val))(align))))
+
+#if defined(_FEC_USE_POLY_MUL)
+#define _FEC_ALIGN_SIZE_VAL sizeof(fec_int_t)
+#elif defined(_FEC_USE_POLY_MUL16)
+#define _FEC_ALIGN_SIZE_VAL 32
+#elif defined(_FEC_USE_POLY_MUL8)
+#define _FEC_ALIGN_SIZE_VAL 16
+#elif defined(_FEC_USE_POLY_MUL4)
+#define _FEC_ALIGN_SIZE_VAL 8
+#elif defined(_FEC_USE_POLY_MUL2)
+#define _FEC_ALIGN_SIZE_VAL 4
+#endif
 
 static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul(fec_int_t a, fec_int_t b) {
 #if defined(__PCLMUL__) && defined(__SSE2__)
     // uint32_t res;
 
     // asm(
-    //     ".intel_syntax noprefix\n"
-    //     "movd xmm0, %k[_a]\n"
-    //     "movd xmm1, %k[_b]\n"
-    //     "movd xmm2, %k[_poly]\n"
-    //     "PCLMULLQLQDQ xmm0, xmm1\n"
-    //     "movq xmm1, xmm0\n"
-    //     "PSRLD xmm1, %c[_shift]\n"
-    //     "PCLMULLQLQDQ xmm1, xmm2\n"
-    //     "XORPS xmm0, xmm1\n"
-    //     "PSRLD xmm1, %c[_shift]\n"
-    //     "PCLMULLQLQDQ xmm1, xmm2\n"
-    //     "XORPS xmm0, xmm1\n"
-    //     "movd %k[_out], xmm0\n"
-    //     ".att_syntax prefix\n"
+    //     "movd %k[_a], %%xmm0\n"
+    //     "movd %k[_b], %%xmm1\n"
+    //     "movd %k[_poly], %%xmm2\n"
+    //     "PCLMULLQLQDQ %%xmm1, %%xmm0\n"
+    //     "movq %%xmm0, %%xmm1\n"
+    //     "PSRLD $%c[_shift], %%xmm1\n"
+    //     "PCLMULLQLQDQ %%xmm2, %%xmm1\n"
+    //     "XORPS %%xmm1, %%xmm0\n"
+    //     "PSRLD $%c[_shift], %%xmm1\n"
+    //     "PCLMULLQLQDQ %%xmm2, %%xmm1\n"
+    //     "XORPS %%xmm1, %%xmm0\n"
+    //     "movd %%xmm0, %k[_out]\n"
     // : [_out] "=r" (res)
     // : [_a] "r" ((uint32_t)a), [_b] "r" ((uint32_t)b), [_poly] "r" ((uint32_t)POLY_G), [_shift] "i" (sizeof(fec_int_t)*8)
-    // : "xmm0", "xmm1", "xmm2"
+    // : "%xmm0", "%xmm1", "%xmm2"
     // );
     // return (fec_int_t)res;
 
@@ -122,7 +142,24 @@ static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul
     _c ^= (u16x8)_d;
     return _c[0];
 
-#elif defined(__PMULL__)
+#elif defined(__ARM_FEATURE_AES)
+    // TODO: FEAT_PMULL is needed in processor
+#ifdef __aarch64__
+#define _poly_t poly64_t
+#else
+#define _poly_t uint32_t
+#endif
+    _poly_t _c;
+    _c = (_poly_t)vmull_p64(a, b);
+    _poly_t _d;
+    _d = (_c >> 16);
+    _d = (_poly_t)vmull_p64(_d, POLY_G);
+    _c ^= _d;
+    _d >>= 16;
+    _d = (_poly_t)vmull_p64(_d, POLY_G);
+    _c ^= _d;
+    return (fec_int_t)_c;
+#undef _poly_t
 #else
     size_t i;
     fec_int_t res = 0;
@@ -137,7 +174,8 @@ static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul
 #endif
 }
 
-static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4(uint64_t a, uint64_t b) {
+#if defined(_FEC_USE_POLY_MUL4)
+static uint64_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4(uint64_t a, uint64_t b) {
     size_t i;
     uint64_t res = 0;
     uint64_t shift_mask = (1ULL<<16) | (1ULL<<32) | (1ULL<<48);
@@ -156,7 +194,31 @@ static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul
 
     return res;
 }
+#endif
 
+#if defined(_FEC_USE_POLY_MUL2)
+static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2_2(uint32_t a, uint32_t b) {
+    size_t i;
+    uint32_t res = 0;
+    uint32_t shift_mask = (1<<16);
+    const uint32_t msb_mask = (1ULL<<(15+16*0)) | (1ULL<<(15+16*1));
+    const uint32_t poly_g = (msb_mask >> 15) * POLY_G;
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        uint32_t shifted_res = (res << 1) & (~shift_mask);
+        uint32_t res_msbs = (res & msb_mask);
+        res = shifted_res ^ (((res_msbs << 1) - (res_msbs >> 15)) & poly_g); // poly left shift 1
+        uint32_t b_msbs = b & msb_mask;
+        res ^= (((b_msbs << 1) - (b_msbs >> 15)) & a); // add a if current bit in b is 1
+        b <<= 1;
+        b &= (~shift_mask);
+    }
+
+    return res;
+}
+#endif
+
+#if defined(_FEC_USE_POLY_MUL8)
 static u16x8 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul8(u16x8 a, u16x8 b) {
     size_t i;
     u16x8 res = {0};
@@ -170,7 +232,9 @@ static u16x8 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul8(u1
 
     return res;
 }
+#endif
 
+#if defined(_FEC_USE_POLY_MUL16)
 static u16x16 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul16(u16x16 a, u16x16 b) {
     size_t i;
     u16x16 res = {0};
@@ -185,7 +249,10 @@ static u16x16 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul16(
 
     return res;
 }
+#endif
 
+// TODO: this doesn't seem to increase performance
+#if defined(_FEC_USE_POLY_MUL_CLMUL2)
 static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2(fec_int_t a1, fec_int_t a2, fec_int_t b1, fec_int_t b2) {
     u64x2 _a;
     _a[0] = a1 | ((uint64_t)a2<<32);
@@ -213,6 +280,7 @@ static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2
     
     return _c[0] | ((uint32_t)_c[2]) << 16;
 }
+#endif
 
 static fec_int_t poly_pow(fec_int_t a, fec_int_t n) {
     fec_int_t res = 1;
@@ -326,7 +394,7 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state) {
     MALLOC_ATTR(missing_y, MIN(k, n));
 
 #ifdef FEC_MIN_MEM
-    MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
+    MALLOC_ATTR(tmp_recovered_ints, ALIGN_UP(MIN(k, n), _FEC_ALIGN_SIZE_VAL/sizeof(fec_int_t)));
 #else
     MALLOC_ATTR(pi_xy_div_xx, MIN(k - 1, n));
     MALLOC_ATTR(pi_yx_div_yy, MIN(k, n));
@@ -1005,209 +1073,171 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 #else
 
 
-// void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize(3)))*/ __attribute__((aligned(16))) __tmp_func3(fec_int_t* tmp_recovered_ints, const fec_int_t *missing_y, const fec_int_t* inv_arr, fec_int_t a, fec_int_t y_j, fec_idx_t i) {
-//     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y[i])]);
-// }
+void /*__attribute__((noinline)) __attribute__((visibility("default"))) __attribute__((optimize("O2"))) __attribute__((aligned(16)))*/ __fec_rx_col_op(fec_int_t* recovered, const fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_int_t* inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
 
-void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize("Os,rename-registers")))*/ __attribute__((aligned(16))) __tmp_func2(fec_int_t* tmp_recovered_ints, const fec_int_t *missing_y, const fec_int_t* inv_arr, fec_int_t a, fec_int_t y_j, fec_idx_t num_y_missing) {
-    // fec_idx_t i;
-    // for (i = 0; i < num_y_missing; i++) {
-    //     fec_int_t missing_y_i = missing_y[i];
-    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
-    //     //__tmp_func3(tmp_recovered_ints, missing_y, inv_arr, a, y_j, i);
-    // }
+    inv_arr = inv_arr - 1;
 
+#if (defined(__PCLMUL__) && defined(__SSE2__)) || defined(_FEC_NO_OPT) || defined(__arm__) || defined(__aarch64__)
     fec_idx_t i;
-    uint64_t aa = ((uint64_t)a << 0) | ((uint64_t)a << 16) | ((uint64_t)a << 32) | ((uint64_t)a << 48);
-    for (i = 0; i < num_y_missing; i+=4) {
-        uint64_t bb = inv_arr[poly_add(y_j, missing_y[i])];
-        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+1])]) << 16;
-        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+2])]) << 32;
-        bb |= ((uint64_t)inv_arr[poly_add(y_j, missing_y[i+3])]) << 48;
-        uint64_t cc = poly_mul4(aa, bb);
-        *((uint64_t*)&tmp_recovered_ints[i]) ^= cc;
-        // tmp_recovered_ints[i+0] ^= (uint16_t)(cc >> 0);
-        // tmp_recovered_ints[i+1] ^= (uint16_t)(cc >> 16);
-        // tmp_recovered_ints[i+2] ^= (uint16_t)(cc >> 32);
-        // tmp_recovered_ints[i+3] ^= (uint16_t)(cc >> 48);
+    for (i = 0; i < num_y_missing; i++) {
+        recovered[i] ^= poly_mul(pak_val, inv_arr[poly_add(pak_xy, missing_y[i])]);
     }
+#elif defined(__AVX2__)
+    fec_idx_t i;
+    u16x16 aa = {pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,
+                pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val};
+    for (i = 0; i < num_y_missing; i+=16) {
+        u16x16 bb;
 
-    // for (i = (num_y_missing/4)*4; i < num_y_missing; i++) {
-    //     fec_int_t missing_y_i = missing_y[i];
-    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
-    // }
+        // fec_idx_t j;
+        // fec_idx_t num_to_copy = MIN(16, num_y_missing - i);
+        // for(j = 0; j < num_to_copy; j++) {
+        //     bb[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+        // }
 
-    // fec_idx_t i;
-    // u16x8 aa = {a,a,a,a,a,a,a,a};
+        uint16_t __attribute__((aligned(32))) tmp_arr[16];
+        fec_idx_t j;
+        fec_idx_t num_to_copy = MIN(16U, num_y_missing - i);
+        for(j = 0; j < num_to_copy; j++) {
+            tmp_arr[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+        }
+        bb = (u16x16)_mm256_load_si256((__m256i*)tmp_arr);
+        
+
+        // bb[0] = inv_arr[poly_add(pak_xy, missing_y[i+0])];
+        // bb[1] = inv_arr[poly_add(pak_xy, missing_y[i+1])];
+        // bb[2] = inv_arr[poly_add(pak_xy, missing_y[i+2])];
+        // bb[3] = inv_arr[poly_add(pak_xy, missing_y[i+3])];
+        // bb[4] = inv_arr[poly_add(pak_xy, missing_y[i+4])];
+        // bb[5] = inv_arr[poly_add(pak_xy, missing_y[i+5])];
+        // bb[6] = inv_arr[poly_add(pak_xy, missing_y[i+6])];
+        // bb[7] = inv_arr[poly_add(pak_xy, missing_y[i+7])];
+        // bb[8] = inv_arr[poly_add(pak_xy, missing_y[i+8])];
+        // bb[9] = inv_arr[poly_add(pak_xy, missing_y[i+9])];
+        // bb[10] = inv_arr[poly_add(pak_xy, missing_y[i+10])];
+        // bb[11] = inv_arr[poly_add(pak_xy, missing_y[i+11])];
+        // bb[12] = inv_arr[poly_add(pak_xy, missing_y[i+12])];
+        // bb[13] = inv_arr[poly_add(pak_xy, missing_y[i+13])];
+        // bb[14] = inv_arr[poly_add(pak_xy, missing_y[i+14])];
+        // bb[15] = inv_arr[poly_add(pak_xy, missing_y[i+15])];
+        u16x16 cc = poly_mul16(aa, bb);
+
+        _mm256_storeu_si256((__m256i_u*)&recovered[i],  (__m256i)((u16x16)_mm256_loadu_si256((__m256i_u*)&recovered[i]) ^ cc));
+
+        // recovered[i+0] ^= cc[0];
+        // recovered[i+1] ^= cc[1];
+        // recovered[i+2] ^= cc[2];
+        // recovered[i+3] ^= cc[3];
+        // recovered[i+4] ^= cc[4];
+        // recovered[i+5] ^= cc[5];
+        // recovered[i+6] ^= cc[6];
+        // recovered[i+7] ^= cc[7];
+        // recovered[i+8] ^= cc[8];
+        // recovered[i+9] ^= cc[9];
+        // recovered[i+10] ^= cc[10];
+        // recovered[i+11] ^= cc[11];
+        // recovered[i+12] ^= cc[12];
+        // recovered[i+13] ^= cc[13];
+        // recovered[i+14] ^= cc[14];
+        // recovered[i+15] ^= cc[15];
+    }
+#elif defined(__SSE2__)
+    fec_idx_t i;
+    u16x8 aa = {pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val};
     // union {
     //     uint16_t __attribute__((aligned(16))) tmp_arr[8];
     //     u16x8 _bb;
     // } u;
     
-    // for (i = 0; i < num_y_missing; i+=8) {
-    //     u16x8 bb;
+    for (i = 0; i < num_y_missing; i+=8) {
+        u16x8 bb;
 
-    //     // bb = (u16x8)_mm_loadu_si128((__m128i_u*)&missing_y[i]);
-    //     // bb ^= y_j;
-    //     // bb[0] = inv_arr[bb[0]];
-    //     // bb[1] = inv_arr[bb[1]];
-    //     // bb[2] = inv_arr[bb[2]];
-    //     // bb[3] = inv_arr[bb[3]];
-    //     // bb[4] = inv_arr[bb[4]];
-    //     // bb[5] = inv_arr[bb[5]];
-    //     // bb[6] = inv_arr[bb[6]];
-    //     // bb[7] = inv_arr[bb[7]];
+        // bb = (u16x8)_mm_loadu_si128((__m128i_u*)&missing_y[i]);
+        // bb ^= pak_xy;
+        // bb[0] = inv_arr[bb[0]];
+        // bb[1] = inv_arr[bb[1]];
+        // bb[2] = inv_arr[bb[2]];
+        // bb[3] = inv_arr[bb[3]];
+        // bb[4] = inv_arr[bb[4]];
+        // bb[5] = inv_arr[bb[5]];
+        // bb[6] = inv_arr[bb[6]];
+        // bb[7] = inv_arr[bb[7]];
 
-    //     // int j;
-    //     // for(j = 0; j < 8; j++) {
-    //     //     bb[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
-    //     // }
+        // int j;
+        // for(j = 0; j < 8; j++) {
+        //     bb[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+        // }
 
-    //     // int j;
-    //     // for(j = 0; j < 8; j++) {
-    //     //     u.tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
-    //     // }
-    //     // bb = u._bb;
-    //     uint16_t __attribute__((aligned(16))) tmp_arr[8];
-    //     int j;
-    //     for(j = 0; j < 8; j++) {
-    //         tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
-    //     }
-    //     bb = (u16x8)_mm_load_si128((__m128i*)tmp_arr);
-
-    //     // bb[0] = inv_arr[poly_add(y_j, missing_y[i+0])];
-    //     // bb[1] = inv_arr[poly_add(y_j, missing_y[i+1])];
-    //     // bb[2] = inv_arr[poly_add(y_j, missing_y[i+2])];
-    //     // bb[3] = inv_arr[poly_add(y_j, missing_y[i+3])];
-    //     // bb[4] = inv_arr[poly_add(y_j, missing_y[i+4])];
-    //     // bb[5] = inv_arr[poly_add(y_j, missing_y[i+5])];
-    //     // bb[6] = inv_arr[poly_add(y_j, missing_y[i+6])];
-    //     // bb[7] = inv_arr[poly_add(y_j, missing_y[i+7])];
-    //     u16x8 cc = poly_mul8(aa, bb);
-
-    //     _mm_storeu_si128((__m128i_u*)&tmp_recovered_ints[i],  (__m128i)((u16x8)_mm_loadu_si128((__m128i_u*)&tmp_recovered_ints[i]) ^ cc));
-
-    //     // tmp_recovered_ints[i+0] ^= cc[0];
-    //     // tmp_recovered_ints[i+1] ^= cc[1];
-    //     // tmp_recovered_ints[i+2] ^= cc[2];
-    //     // tmp_recovered_ints[i+3] ^= cc[3];
-    //     // tmp_recovered_ints[i+4] ^= cc[4];
-    //     // tmp_recovered_ints[i+5] ^= cc[5];
-    //     // tmp_recovered_ints[i+6] ^= cc[6];
-    //     // tmp_recovered_ints[i+7] ^= cc[7];
-    // }
-
-    // for (i = (num_y_missing/8)*8; i < num_y_missing; i++) {
-    //     fec_int_t missing_y_i = missing_y[i];
-    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
-    // }
-
-    // fec_idx_t i;
-    // u16x16 aa = {a,a,a,a,a,a,a,a,
-    //             a,a,a,a,a,a,a,a};
-    // for (i = 0; i < num_y_missing; i+=16) {
-    //     u16x16 bb;
-
-    //     // int j;
-    //     // for(j = 0; j < 16; j++) {
-    //     //     bb[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
-    //     // }
-
-    //     uint16_t __attribute__((aligned(32))) tmp_arr[16];
-    //     int j;
-    //     for(j = 0; j < 16; j++) {
-    //         tmp_arr[j] = inv_arr[poly_add(y_j, missing_y[i+j])];
-    //     }
-    //     bb = (u16x16)_mm256_load_si256((__m256i*)tmp_arr);
-        
-
-    //     // bb[0] = inv_arr[poly_add(y_j, missing_y[i+0])];
-    //     // bb[1] = inv_arr[poly_add(y_j, missing_y[i+1])];
-    //     // bb[2] = inv_arr[poly_add(y_j, missing_y[i+2])];
-    //     // bb[3] = inv_arr[poly_add(y_j, missing_y[i+3])];
-    //     // bb[4] = inv_arr[poly_add(y_j, missing_y[i+4])];
-    //     // bb[5] = inv_arr[poly_add(y_j, missing_y[i+5])];
-    //     // bb[6] = inv_arr[poly_add(y_j, missing_y[i+6])];
-    //     // bb[7] = inv_arr[poly_add(y_j, missing_y[i+7])];
-    //     // bb[8] = inv_arr[poly_add(y_j, missing_y[i+8])];
-    //     // bb[9] = inv_arr[poly_add(y_j, missing_y[i+9])];
-    //     // bb[10] = inv_arr[poly_add(y_j, missing_y[i+10])];
-    //     // bb[11] = inv_arr[poly_add(y_j, missing_y[i+11])];
-    //     // bb[12] = inv_arr[poly_add(y_j, missing_y[i+12])];
-    //     // bb[13] = inv_arr[poly_add(y_j, missing_y[i+13])];
-    //     // bb[14] = inv_arr[poly_add(y_j, missing_y[i+14])];
-    //     // bb[15] = inv_arr[poly_add(y_j, missing_y[i+15])];
-    //     u16x16 cc = poly_mul16(aa, bb);
-
-    //     _mm256_storeu_si256((__m256i_u*)&tmp_recovered_ints[i],  (__m256i)((u16x16)_mm256_loadu_si256((__m256i_u*)&tmp_recovered_ints[i]) ^ cc));
-
-    //     // tmp_recovered_ints[i+0] ^= cc[0];
-    //     // tmp_recovered_ints[i+1] ^= cc[1];
-    //     // tmp_recovered_ints[i+2] ^= cc[2];
-    //     // tmp_recovered_ints[i+3] ^= cc[3];
-    //     // tmp_recovered_ints[i+4] ^= cc[4];
-    //     // tmp_recovered_ints[i+5] ^= cc[5];
-    //     // tmp_recovered_ints[i+6] ^= cc[6];
-    //     // tmp_recovered_ints[i+7] ^= cc[7];
-    //     // tmp_recovered_ints[i+8] ^= cc[8];
-    //     // tmp_recovered_ints[i+9] ^= cc[9];
-    //     // tmp_recovered_ints[i+10] ^= cc[10];
-    //     // tmp_recovered_ints[i+11] ^= cc[11];
-    //     // tmp_recovered_ints[i+12] ^= cc[12];
-    //     // tmp_recovered_ints[i+13] ^= cc[13];
-    //     // tmp_recovered_ints[i+14] ^= cc[14];
-    //     // tmp_recovered_ints[i+15] ^= cc[15];
-    // }
-
-    // for (i = (num_y_missing/16)*16; i < num_y_missing; i++) {
-    //     fec_int_t missing_y_i = missing_y[i];
-    //     tmp_recovered_ints[i] ^= poly_mul(a, inv_arr[poly_add(y_j, missing_y_i)]);
-    // }
-
-    // fec_idx_t i;
-    // for (i = 0; i < num_y_missing; i += 2) {
-    //     uint32_t cc = poly_mul2(a, a, inv_arr[poly_add(y_j, missing_y[i+0])], inv_arr[poly_add(y_j, missing_y[i+1])]);
-
-    //     *((uint32_t*)&tmp_recovered_ints[i]) ^= cc;
-    // }
-    
-}
-
-void __attribute__((noinline)) __attribute__((visibility("default"))) /*__attribute__((optimize(3)))*/ __attribute__((aligned(16))) __tmp_func(const fec_rx_state_t *rx_state) {
-    const fec_state_t *state = rx_state->state;
-    fec_idx_t n = state->n;
-    size_t pak_len = state->pak_len;
-
-    fec_idx_t num_y_missing = n - rx_state->num_info;
-    fec_int_t *present_y;
-    fec_int_t *missing_y;
-    unaligend_fec_int_t** y_pak_arr;
-    fec_idx_t num_y_present = rx_state->num_info;
-
-    fec_idx_t i=0, j;
-    fec_idx_t y_j;
-    size_t ii;
-    i = i;
-
-    present_y = rx_state->pak_xy_arr;
-    missing_y = rx_state->missing_y;
-    y_pak_arr = rx_state->pak_arr;
-
-    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
-
-    const fec_int_t* inv_arr = state->inv_arr - 1;
-
-    for (ii = 0; ii < pak_len; ii++) {         
-        for (j = 0; j < num_y_present; j++) {
-            y_j = present_y[j];
-            fec_int_t y_pak_arr_j_ii = y_pak_arr[j][ii];
-            // for (i = 0; i < num_y_missing; i++) {
-            //     fec_int_t missing_y_i = missing_y[i];
-            //     tmp_recovered_ints[i] ^= poly_mul(y_pak_arr_j_ii, inv_arr[poly_add(y_j, missing_y_i)]);
-            // }
-            __tmp_func2(tmp_recovered_ints, missing_y, inv_arr, y_pak_arr_j_ii, y_j, num_y_missing);
+        // int j;
+        // for(j = 0; j < 8; j++) {
+        //     u.tmp_arr[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+        // }
+        // bb = u._bb;
+        uint16_t __attribute__((aligned(16))) tmp_arr[8];
+        fec_idx_t j;
+        fec_idx_t num_to_copy = MIN(8U, num_y_missing - i);
+        for(j = 0; j < num_to_copy; j++) {
+            tmp_arr[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
         }
+        bb = (u16x8)_mm_load_si128((__m128i*)tmp_arr);
+
+        // bb[0] = inv_arr[poly_add(pak_xy, missing_y[i+0])];
+        // bb[1] = inv_arr[poly_add(pak_xy, missing_y[i+1])];
+        // bb[2] = inv_arr[poly_add(pak_xy, missing_y[i+2])];
+        // bb[3] = inv_arr[poly_add(pak_xy, missing_y[i+3])];
+        // bb[4] = inv_arr[poly_add(pak_xy, missing_y[i+4])];
+        // bb[5] = inv_arr[poly_add(pak_xy, missing_y[i+5])];
+        // bb[6] = inv_arr[poly_add(pak_xy, missing_y[i+6])];
+        // bb[7] = inv_arr[poly_add(pak_xy, missing_y[i+7])];
+        u16x8 cc = poly_mul8(aa, bb);
+
+        _mm_storeu_si128((__m128i_u*)&recovered[i],  (__m128i)((u16x8)_mm_loadu_si128((__m128i_u*)&recovered[i]) ^ cc));
+
+        // recovered[i+0] ^= cc[0];
+        // recovered[i+1] ^= cc[1];
+        // recovered[i+2] ^= cc[2];
+        // recovered[i+3] ^= cc[3];
+        // recovered[i+4] ^= cc[4];
+        // recovered[i+5] ^= cc[5];
+        // recovered[i+6] ^= cc[6];
+        // recovered[i+7] ^= cc[7];
     }
+#elif defined(__x86_64__)
+    fec_idx_t i;
+    uint64_t aa = ((uint64_t)pak_val << 0) | ((uint64_t)pak_val << 16) | ((uint64_t)pak_val << 32) | ((uint64_t)pak_val << 48);
+    for (i = 0; i < num_y_missing; i+=4) {
+        uint64_t bb = 0;
+        fec_idx_t j;
+        fec_idx_t num_to_copy = MIN(4U, num_y_missing - i);
+        for (j = 0; j < num_to_copy; j++) {
+            bb |= ((uint64_t)inv_arr[poly_add(pak_xy, missing_y[i+j])]) << (j*16);
+        }
+        uint64_t cc = poly_mul4(aa, bb);
+
+        *((uint64_t*)&recovered[i]) ^= cc;
+        // recovered[i+0] ^= (uint16_t)(cc >> 0);
+        // recovered[i+1] ^= (uint16_t)(cc >> 16);
+        // recovered[i+2] ^= (uint16_t)(cc >> 32);
+        // recovered[i+3] ^= (uint16_t)(cc >> 48);
+    }
+
+#elif defined(__i386__)
+    // TODO: check how much performance it adds
+    fec_idx_t i;
+    uint32_t aa = ((uint32_t)pak_val << 0) | ((uint32_t)pak_val << 16);
+    for (i = 0; i < num_y_missing; i+=2) {
+        uint32_t bb = inv_arr[poly_add(pak_xy, missing_y[i])];
+        if (i != num_y_missing - 1) {
+            bb |= ((uint32_t)inv_arr[poly_add(pak_xy, missing_y[i+1])]) << 16;
+        }
+        uint32_t cc = poly_mul2_2(aa, bb);
+        *((uint32_t*)&recovered[i]) ^= cc;
+    }
+
+#else
+#error all cases should be covered
+#endif
+    
 }
 
 
@@ -1345,18 +1375,20 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         for (j = 0; j < num_y_present; j++) {
             y_j = present_y[j];
             fec_int_t y_pak_arr_j_ii = y_pak_arr[j][ii];
-            for (i = 0; i < num_y_missing; i++) {
-                fec_int_t missing_y_i = missing_y[i];
-                tmp_recovered_ints[i] ^= poly_mul(y_pak_arr_j_ii, _fec_inv(state, poly_add(y_j, missing_y_i)));
-            }
+            // for (i = 0; i < num_y_missing; i++) {
+            //     fec_int_t missing_y_i = missing_y[i];
+            //     tmp_recovered_ints[i] ^= poly_mul(y_pak_arr_j_ii, _fec_inv(state, poly_add(y_j, missing_y_i)));
+            // }
+            __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, state->inv_arr, y_pak_arr_j_ii, y_j);
         }
         for(j = 0; j < num_x_present; j++) {
             fec_int_t x_j = present_x[j];
             fec_int_t x_pak_arr_j_ii = x_pak_arr[j][ii];
-            for (i = 0; i < num_y_missing; i++) {
-                fec_int_t missing_y_i = missing_y[i];
-                tmp_recovered_ints[i] ^= poly_mul(x_pak_arr_j_ii, _fec_inv(state, poly_add(x_j, missing_y_i)));
-            }
+            // for (i = 0; i < num_y_missing; i++) {
+            //     fec_int_t missing_y_i = missing_y[i];
+            //     tmp_recovered_ints[i] ^= poly_mul(x_pak_arr_j_ii, _fec_inv(state, poly_add(x_j, missing_y_i)));
+            // }
+            __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, state->inv_arr, x_pak_arr_j_ii, x_j);
         }
 
         for (i = 0; i < num_y_missing; i++) {
@@ -1416,8 +1448,9 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     printf("---1.6--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
 
-    __tmp_func(rx_state);
-
+// #if defined(__x86_64__) || defined(__i386__)
+//     __tmp_func(rx_state);
+// #endif
     // {
     //     uint16_t aaa = rand();
     //     uint16_t bbb = rand();
