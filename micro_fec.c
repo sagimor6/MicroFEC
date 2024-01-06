@@ -52,6 +52,11 @@ typedef uint16_t u16x16 __attribute__ ((vector_size (32)));
 typedef uint32_t  u32x8 __attribute__ ((vector_size (32)));
 typedef uint64_t  u64x4 __attribute__ ((vector_size (32)));
 
+typedef uint8_t u8x8 __attribute__ ((vector_size (8)));
+typedef uint16_t u16x4 __attribute__ ((vector_size (8)));
+typedef uint32_t  u32x2 __attribute__ ((vector_size (8)));
+typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
+
 #elif defined(__arm__) || defined(__aarch64__)
 #include <arm_neon.h>
 #endif
@@ -64,8 +69,12 @@ typedef uint64_t  u64x4 __attribute__ ((vector_size (32)));
 #define _FEC_USE_POLY_MUL8
 #elif defined(__x86_64__)
 #define _FEC_USE_POLY_MUL4
+#elif defined(__MMX__)
+#define _FEC_USE_POLY_MUL4_MMX
 #elif defined(__i386__)
 #define _FEC_USE_POLY_MUL2
+#else
+#error all cases should be defined
 #endif
 
 #define ALIGN_UP(val, align) (((val) + (align) - 1) & (-((__typeof__(val))(align))))
@@ -76,7 +85,7 @@ typedef uint64_t  u64x4 __attribute__ ((vector_size (32)));
 #define _FEC_ALIGN_SIZE_VAL 32
 #elif defined(_FEC_USE_POLY_MUL8)
 #define _FEC_ALIGN_SIZE_VAL 16
-#elif defined(_FEC_USE_POLY_MUL4)
+#elif defined(_FEC_USE_POLY_MUL4) || defined(_FEC_USE_POLY_MUL4_MMX)
 #define _FEC_ALIGN_SIZE_VAL 8
 #elif defined(_FEC_USE_POLY_MUL2)
 #define _FEC_ALIGN_SIZE_VAL 4
@@ -212,6 +221,22 @@ static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2
         res ^= (((b_msbs << 1) - (b_msbs >> 15)) & a); // add a if current bit in b is 1
         b <<= 1;
         b &= (~shift_mask);
+    }
+
+    return res;
+}
+#endif
+
+#if defined(_FEC_USE_POLY_MUL4_MMX)
+static __m64 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4_mmx(__m64 a, __m64 b) {
+    size_t i;
+    __m64 res = {0};
+    const __m64 poly_g = (__m64)((u16x4){POLY_G,POLY_G,POLY_G,POLY_G});
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        res = _mm_xor_si64(_mm_slli_pi16(res, 1), _mm_and_si64(poly_g, _mm_srai_pi16(res, 15))); // poly left shift 1
+        res = _mm_xor_si64(res, _mm_and_si64(a, _mm_srai_pi16(b, 15))); // add a if current bit in b is 1
+        b = _mm_slli_pi16(b, 1);
     }
 
     return res;
@@ -1073,16 +1098,16 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 #else
 
 
-void /*__attribute__((noinline)) __attribute__((visibility("default"))) __attribute__((optimize("O2"))) __attribute__((aligned(16)))*/ __fec_rx_col_op(fec_int_t* recovered, const fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_int_t* inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+void __attribute__((noinline)) __attribute__((visibility("default"))) __attribute__((optimize("O2"))) __attribute__((aligned(16))) __fec_rx_col_op(fec_int_t* recovered, const fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_int_t* inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
 
     inv_arr = inv_arr - 1;
 
-#if (defined(__PCLMUL__) && defined(__SSE2__)) || defined(_FEC_NO_OPT) || defined(__arm__) || defined(__aarch64__)
+#if defined(_FEC_USE_POLY_MUL)
     fec_idx_t i;
     for (i = 0; i < num_y_missing; i++) {
         recovered[i] ^= poly_mul(pak_val, inv_arr[poly_add(pak_xy, missing_y[i])]);
     }
-#elif defined(__AVX2__)
+#elif defined(_FEC_USE_POLY_MUL16)
     fec_idx_t i;
     u16x16 aa = {pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,
                 pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val};
@@ -1141,7 +1166,7 @@ void /*__attribute__((noinline)) __attribute__((visibility("default"))) __attrib
         // recovered[i+14] ^= cc[14];
         // recovered[i+15] ^= cc[15];
     }
-#elif defined(__SSE2__)
+#elif defined(_FEC_USE_POLY_MUL8)
     fec_idx_t i;
     u16x8 aa = {pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val,pak_val};
     // union {
@@ -1202,7 +1227,26 @@ void /*__attribute__((noinline)) __attribute__((visibility("default"))) __attrib
         // recovered[i+6] ^= cc[6];
         // recovered[i+7] ^= cc[7];
     }
-#elif defined(__x86_64__)
+#elif defined(_FEC_USE_POLY_MUL4_MMX)
+    fec_idx_t i;
+    __m64 aa = (__m64)((u16x4){pak_val,pak_val,pak_val,pak_val});
+    
+    for (i = 0; i < num_y_missing; i+=4) {
+        __m64 bb;
+
+        uint16_t __attribute__((aligned(8))) tmp_arr[4];
+        fec_idx_t j;
+        fec_idx_t num_to_copy = MIN(4U, num_y_missing - i);
+        for(j = 0; j < num_to_copy; j++) {
+            tmp_arr[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+        }
+        bb = *((__m64*)tmp_arr);
+
+        __m64 cc = poly_mul4_mmx(aa, bb);
+
+        *((__m64*)&recovered[i]) = _mm_xor_si64(*((__m64*)&recovered[i]), cc);
+    }
+#elif defined(_FEC_USE_POLY_MUL4)
     fec_idx_t i;
     uint64_t aa = ((uint64_t)pak_val << 0) | ((uint64_t)pak_val << 16) | ((uint64_t)pak_val << 32) | ((uint64_t)pak_val << 48);
     for (i = 0; i < num_y_missing; i+=4) {
@@ -1221,7 +1265,7 @@ void /*__attribute__((noinline)) __attribute__((visibility("default"))) __attrib
         // recovered[i+3] ^= (uint16_t)(cc >> 48);
     }
 
-#elif defined(__i386__)
+#elif defined(_FEC_USE_POLY_MUL2)
     // TODO: check how much performance it adds
     fec_idx_t i;
     uint32_t aa = ((uint32_t)pak_val << 0) | ((uint32_t)pak_val << 16);
@@ -1399,6 +1443,10 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
             }
         }
     }
+
+#ifdef _FEC_USE_POLY_MUL4_MMX
+    _mm_empty();
+#endif
 
     end_time = get_timestamp();
     printf("---1.4--- %f\n", (end_time - start_time)/((double)1000000000));
