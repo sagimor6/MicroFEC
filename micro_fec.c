@@ -5,10 +5,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+//#define PERF_DEBUG 
+#ifdef PERF_DEBUG
 #include <time.h>
 #include <stdio.h>
+#endif
 
 #include "micro_fec.h"
+
+#ifdef PERF_DEBUG
+#define PERF_DEBUG_ATTRS __attribute__((noinline)) __attribute__((aligned(16)))
+#else
+#define PERF_DEBUG_ATTRS
+#endif
 
 #ifndef MAX
 #define MAX(a,b) \
@@ -92,7 +101,7 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #define _FEC_ALIGN_SIZE_VAL 4
 #endif
 
-static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul(fec_int_t a, fec_int_t b) {
+static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
 #if defined(__PCLMUL__) && defined(__SSE2__)
     // uint32_t res;
 
@@ -185,7 +194,7 @@ static fec_int_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul
 }
 
 #if defined(_FEC_USE_POLY_MUL4)
-static uint64_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4(uint64_t a, uint64_t b) {
+static uint64_t PERF_DEBUG_ATTRS poly_mul4(uint64_t a, uint64_t b) {
     size_t i;
     uint64_t res = 0;
     uint64_t shift_mask = (1ULL<<16) | (1ULL<<32) | (1ULL<<48);
@@ -207,7 +216,7 @@ static uint64_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4
 #endif
 
 #if defined(_FEC_USE_POLY_MUL2)
-static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2_2(uint32_t a, uint32_t b) {
+static uint32_t PERF_DEBUG_ATTRS poly_mul2_2(uint32_t a, uint32_t b) {
     size_t i;
     uint32_t res = 0;
     uint32_t shift_mask = (1<<16);
@@ -229,7 +238,7 @@ static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2
 #endif
 
 #if defined(_FEC_USE_POLY_MUL4_MMX)
-static __m64 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4_mmx(__m64 a, __m64 b) {
+static __m64 PERF_DEBUG_ATTRS poly_mul4_mmx(__m64 a, __m64 b) {
     size_t i;
     __m64 res = {0};
     const __m64 poly_g = (__m64)((u16x4){POLY_G,POLY_G,POLY_G,POLY_G});
@@ -245,7 +254,7 @@ static __m64 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul4_mm
 #endif
 
 #if defined(_FEC_USE_POLY_MUL8)
-static u16x8 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul8(u16x8 a, u16x8 b) {
+static u16x8 PERF_DEBUG_ATTRS poly_mul8(u16x8 a, u16x8 b) {
     size_t i;
     u16x8 res = {0};
     u16x8 poly_g = {POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G};
@@ -261,7 +270,7 @@ static u16x8 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul8(u1
 #endif
 
 #if defined(_FEC_USE_POLY_MUL16)
-static u16x16 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul16(u16x16 a, u16x16 b) {
+static u16x16 PERF_DEBUG_ATTRS poly_mul16(u16x16 a, u16x16 b) {
     size_t i;
     u16x16 res = {0};
     u16x16 poly_g = {POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,POLY_G,
@@ -279,7 +288,7 @@ static u16x16 __attribute__((aligned(16))) __attribute__((noinline)) poly_mul16(
 
 // TODO: this doesn't seem to increase performance
 #if defined(_FEC_USE_POLY_MUL_CLMUL2)
-static uint32_t __attribute__((aligned(16))) __attribute__((noinline)) poly_mul2(fec_int_t a1, fec_int_t a2, fec_int_t b1, fec_int_t b2) {
+static uint32_t PERF_DEBUG_ATTRS poly_mul2(fec_int_t a1, fec_int_t a2, fec_int_t b1, fec_int_t b2) {
     u64x2 _a;
     _a[0] = a1 | ((uint64_t)a2<<32);
     u64x2 _b;
@@ -1113,7 +1122,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
 #else
 
 
-void __attribute__((noinline)) __attribute__((visibility("default"))) __attribute__((optimize("O2"))) __attribute__((aligned(16))) __fec_rx_col_op(fec_int_t* recovered, const fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_int_t* inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_int_t* recovered, const fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_int_t* inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
 
     inv_arr = inv_arr - 1;
 
@@ -1309,12 +1318,14 @@ void __attribute__((noinline)) __attribute__((visibility("default"))) __attribut
 }
 
 
+#ifdef PERF_DEBUG
 static uint64_t get_timestamp() {
     struct timespec tp = {0};
     //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
     return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
 }
+#endif
 
 bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     const fec_state_t *state = rx_state->state;
@@ -1335,8 +1346,6 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     fec_idx_t y_i, y_j;
     size_t ii;
 
-    uint64_t start_time, end_time;
-
     if (rx_state->num_info + rx_state->num_redundant + has_one_row < n) {
         return false;
     }
@@ -1353,7 +1362,10 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     x_pak_arr = &rx_state->pak_arr[n - num_x_present];
     y_pak_arr = rx_state->pak_arr;
 
+#ifdef PERF_DEBUG
+    uint64_t start_time, end_time;
     start_time = get_timestamp();
+#endif
 
     for (y_i = 0, i = 0; i < num_y_missing; y_i++) {
         if ((rx_state->received_paks_bitmap[y_i / 8] & (1<<(y_i & (8-1)))) == 0) {
@@ -1362,9 +1374,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.1--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     for (i = 0; i < num_y_present; i++) {
         y_i = present_y[i];
@@ -1381,9 +1395,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.2--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     for (i = 0; i < num_x_present; i++) {
         fec_int_t pi_xy_div_xx_i = 1;
@@ -1403,9 +1419,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.3--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
 
@@ -1472,9 +1490,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     _mm_empty();
 #endif
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.4--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     for (i = 0; i < num_y_missing; i++) {
         fec_int_t pi_yx_div_yy_i = 1;
@@ -1497,9 +1517,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.5--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     for (i = 0; i < num_y_present; i++) {
         y_i = present_y[i];
@@ -1516,13 +1538,12 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.6--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
-// #if defined(__x86_64__) || defined(__i386__)
-//     __tmp_func(rx_state);
-// #endif
     // {
     //     uint16_t aaa = rand();
     //     uint16_t bbb = rand();
@@ -1561,9 +1582,11 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         }
     }
 
+#ifdef PERF_DEBUG
     end_time = get_timestamp();
     printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
 
     return true;
 }
