@@ -567,6 +567,25 @@ valid_pak_end:
 
 #else
 
+bool fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
+    fec_int_t n = rx_state->state->n;
+    bool _can_recover;
+    bool _discard_pak;
+
+    if (idx >= n + rx_state->state->k) {
+        return false;
+    }
+
+    _can_recover = (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) >= n);
+
+    // if can recover or duplicate
+    _discard_pak = _can_recover || (rx_state->received_paks_bitmap[idx / 8] & (1<<(idx & (8-1)))) != 0;
+
+    *can_recover = _can_recover;
+    *discard_pak = _discard_pak;
+    return true;
+}
+
 bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
     fec_int_t n = rx_state->state->n;
     bool _can_recover;
