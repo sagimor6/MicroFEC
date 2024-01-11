@@ -667,6 +667,8 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, vo
     //     out_pak[j] = res;
     // }
 
+    memset(out_pak, 0, pak_len*sizeof(fec_int_t));
+
     if (idx == 0) {
         for (i = 0; i < n; i++) {
             const unaligend_fec_int_t* pak = tx_state->paks[i];
@@ -1370,7 +1372,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
     }
 
     if (num_y_missing == 0) {
-        return true;
+        goto reorder_packets;
     }
 
     num_x_present = num_y_missing - has_one_row;
@@ -1581,6 +1583,16 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
         rx_state->pak_xy_arr[n - num_x_present + i] = rx_state->missing_y[i + has_one_row];
     }
 
+#ifdef PERF_DEBUG
+    end_time = get_timestamp();
+    printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
+    start_time = get_timestamp();
+#endif
+
+reorder_packets:
+#ifdef PERF_DEBUG
+    start_time = get_timestamp();
+#endif
     for (i = 0; i < n; i++) {
         while (rx_state->pak_xy_arr[i] != i) {
             fec_int_t idx = rx_state->pak_xy_arr[i];
@@ -1592,18 +1604,22 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state) {
                 rx_state->pak_xy_arr[i] = tmp;
             }
 
+#ifndef FEC_USER_GIVEN_BUFFER
             {
                 unaligend_fec_int_t *tmp;
                 tmp = rx_state->pak_arr[idx];
                 rx_state->pak_arr[idx] = rx_state->pak_arr[i];
                 rx_state->pak_arr[i] = tmp;
             }
+#else
+            memswap(&rx_state->pak_buffer[i*pak_len], &rx_state->pak_buffer[idx*pak_len], pak_len);
+#endif
         }
     }
 
 #ifdef PERF_DEBUG
     end_time = get_timestamp();
-    printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
+    printf("---1.8--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
 #endif
 
