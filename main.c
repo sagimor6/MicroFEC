@@ -97,6 +97,9 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     bool inited_rx_state = false;
     fec_rx_state_t rx_state;
     uint64_t start_time, end_time;
+#ifdef FEC_USER_GIVEN_BUFFER
+    fec_int_t *rx_dest_buf = NULL;
+#endif
 
     CHECK((pak_len % sizeof(fec_int_t)) == 0);
 
@@ -107,6 +110,11 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 
     r_paks = malloc(k * pak_len * sizeof(uint16_t));;
     CHECK(r_paks != NULL);
+
+#ifdef FEC_USER_GIVEN_BUFFER
+    rx_dest_buf = malloc(n * pak_len * sizeof(uint16_t));
+    CHECK(rx_dest_buf != NULL);
+#endif
 
     srand(1337/*time(NULL)*/);
 
@@ -122,7 +130,11 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     inited_state = true;
     CHECK(fec_tx_init(&tx_state, &state));
     inited_tx_state = true;
+#ifndef FEC_USER_GIVEN_BUFFER
     CHECK(fec_rx_init(&rx_state, &state));
+#else
+    CHECK(fec_rx_init(&rx_state, &state, rx_dest_buf));
+#endif
     inited_rx_state = true;
 
     end_time = get_timestamp();
@@ -177,14 +189,17 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     TRACE("--fec_rx_fill_missing_paks-- %f\n", (end_time - start_time) / ((double)1000000000));
     start_time = get_timestamp();
 
+#ifndef FEC_USER_GIVEN_BUFFER
     uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
-
     for (i = 0; i < n; i++) {
         if (res[i] == &paks[i*pak_len]) {
             continue;
         }
         CHECK(memcmp(res[i], &paks[i*pak_len], pak_len * sizeof(uint16_t)) == 0);
     }
+#else
+    CHECK(memcmp(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t)) == 0);
+#endif    
 
 cleanup:
     if (paks != NULL) {
@@ -196,6 +211,11 @@ cleanup:
     if (rcv_idxs != NULL) {
         free(rcv_idxs);
     }
+#ifdef FEC_USER_GIVEN_BUFFER
+    if (rx_dest_buf != NULL) {
+        free(rx_dest_buf);
+    }
+#endif
 
     if (inited_rx_state) {
         fec_rx_destroy(&rx_state);

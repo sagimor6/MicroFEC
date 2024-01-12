@@ -39,6 +39,8 @@ typedef struct {
     const unaligend_fec_int_t** paks;
 } fec_tx_state_t;
 
+//#define FEC_USER_GIVEN_BUFFER
+
 typedef struct {
     const fec_state_t* state;
 #ifndef FEC_LARGE_K
@@ -47,9 +49,16 @@ typedef struct {
     fec_int_t *present_x; // size = k - 1
 #else
     uint8_t* received_paks_bitmap; // size = (n + real k)/8
+#ifndef FEC_USER_GIVEN_BUFFER
     unaligend_fec_int_t** pak_arr; // size = n
-    fec_int_t *pak_xy_arr; // size = n
     unaligend_fec_int_t* ones_pak;
+#else
+    unaligend_fec_int_t *pak_buffer; // given by user (size = n*pak_len)
+    fec_int_t ones_pak_idx;
+    bool has_one_pak; // TODO: actually x_i cannot be 0, cause n > 0, so ones_pak_idx can point to elem in pak_xy_arr with 0.
+    // TODO: we also have this info from the bitfield
+#endif
+    fec_int_t *pak_xy_arr; // size = n
 #endif
     fec_idx_t num_info;
     fec_idx_t num_redundant;
@@ -87,11 +96,17 @@ EXPORT bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_i
 EXPORT bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, fec_idx_t idx, void *pak);
 EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
+#ifndef FEC_USER_GIVEN_BUFFER
 EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state);
+#else
+EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_state_t *state, void* dest_buf);
+#endif
 EXPORT bool fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx, bool *can_recover, bool *discard_pak);
 EXPORT bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak);
 EXPORT bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state);
+#ifndef FEC_USER_GIVEN_BUFFER
 EXPORT void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
+#endif
 EXPORT void fec_rx_reset(fec_rx_state_t *rx_state);
 EXPORT void fec_rx_destroy(fec_rx_state_t *rx_state);
 
