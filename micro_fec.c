@@ -354,23 +354,23 @@ static inline fec_int_t _fec_inv(const fec_inv_cache_t *inv_cache, fec_int_t a) 
     return inv_cache->inv_arr[a - 1];
 }
 
-bool fec_inv_cache_init(fec_inv_cache_t *inv_cache, fec_idx_t n, fec_idx_t k) {
+fec_status_t fec_inv_cache_init(fec_inv_cache_t *inv_cache, fec_idx_t n, fec_idx_t k) {
     fec_idx_t n_k_1 = 0;
 
     if(n != 0 || k != 0) {
         n_k_1 = n + k - 1;
         if (n_k_1 < n) {
-            return false;
+            return FEC_STATUS_INVALID_PARAMS;
         }
     }
 
     return fec_inv_cache_init_raw(inv_cache, n_k_1);
 }
 
-bool fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1) {
+fec_status_t fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1) {
 
     if (n_k_1 > (((fec_idx_t)1)<<(sizeof(fec_int_t)*8))) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
 
     inv_cache->inv_arr_sz = n_k_1;
@@ -380,7 +380,7 @@ bool fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1) {
         size_t arr_size = inv_cache->inv_arr_sz - 1;
         inv_cache->inv_arr = malloc(sizeof(inv_cache->inv_arr[0]) * arr_size);
         if (inv_cache->inv_arr == NULL) {
-            return false;
+            return FEC_STATUS_OUT_OF_MEMORY;
         }
 
         fec_int_t i;
@@ -393,7 +393,7 @@ bool fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1) {
         inv_cache->inv_arr = NULL;
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 void fec_inv_cache_destroy(fec_inv_cache_t *inv_cache) {
@@ -402,19 +402,19 @@ void fec_inv_cache_destroy(fec_inv_cache_t *inv_cache) {
     }
 }
 
-bool fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len) {
+fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len) {
     if(n > (((fec_idx_t)1)<<(sizeof(fec_int_t)*8))) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
 
     tx_state->n = n;
     tx_state->pak_len = pak_len;
     tx_state->paks = calloc(n, sizeof(tx_state->paks[0]));
     if (tx_state->paks == NULL) {
-        return false;
+        return FEC_STATUS_OUT_OF_MEMORY;
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 void fec_tx_destroy(fec_tx_state_t *tx_state) {
@@ -425,20 +425,20 @@ void fec_tx_destroy(fec_tx_state_t *tx_state) {
 
 
 #ifndef FEC_USER_GIVEN_BUFFER
-bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len)
+fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len)
 #else
-bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len, void* dest_buf)
+fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len, void* dest_buf)
 #endif
 {
     memset(rx_state, 0, sizeof(*rx_state));
 
     if (n == 0) {
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     fec_idx_t n_k_1 = n + k - 1;
     if (n_k_1 < k || n_k_1 > (((fec_idx_t)1)<<(sizeof(fec_int_t)*8))) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
     // if k == 0 then all k-1 are in MIN so the underflow will do nothing
 
@@ -446,13 +446,13 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_
     rx_state->name = malloc(sizeof(rx_state->name[0]) * (size)); \
     if (rx_state->name == NULL) { \
         fec_rx_destroy(rx_state); \
-        return false; \
+        return FEC_STATUS_OUT_OF_MEMORY; \
     }
 #define CALLOC_ATTR(name, size) \
     rx_state->name = calloc((size), sizeof(rx_state->name[0])); \
     if (rx_state->name == NULL) { \
         fec_rx_destroy(rx_state); \
-        return false; \
+        return FEC_STATUS_OUT_OF_MEMORY; \
     }
 
     rx_state->n = n;
@@ -500,7 +500,7 @@ bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_
 #endif
 #endif
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 void fec_rx_reset(fec_rx_state_t *rx_state) {
@@ -557,40 +557,36 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
 #undef FREE_ATTR
 }
 
-bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx) {
+fec_status_t fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx) {
     if (idx >= tx_state->n) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
     tx_state->paks[idx] = (const unaligend_fec_int_t*)pak;
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #ifndef FEC_LARGE_K
 
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
+fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) {
     fec_int_t n = rx_state->n;
-    bool _can_recover;
-    bool _discard_pak = true;
 
     if (idx >= n + rx_state->k) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
 
-    _can_recover = (rx_state->num_info + rx_state->num_redundant >= n);
-
-    if (_can_recover) {
-        goto valid_pak_end;
+    if (rx_state->num_info + rx_state->num_redundant >= n) {
+        return FEC_STATUS_CAN_DROP_ALREADY_RECOVERABLE;
     }
 
     if (idx < n) {
         if (rx_state->info_paks[idx] != NULL) {
-            goto valid_pak_end;
+            return FEC_STATUS_CAN_DROP_DUP_PAK;
         }
         rx_state->info_paks[idx] = (unaligend_fec_int_t*)pak;
         rx_state->num_info++;
     } else {
         if (rx_state->redundancy_paks[idx - n] != NULL) {
-            goto valid_pak_end;
+            return FEC_STATUS_CAN_DROP_DUP_PAK;
         }
         rx_state->redundancy_paks[idx - n] = (unaligend_fec_int_t*)pak;
         if (idx != n) {
@@ -600,17 +596,11 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
         rx_state->num_redundant++;
     }
 
-    _discard_pak = false;
-    _can_recover = (rx_state->num_info + rx_state->num_redundant >= n);
-    
-valid_pak_end:
-    if (can_recover) {
-        *can_recover = _can_recover;
+    if (rx_state->num_info + rx_state->num_redundant >= n) {
+        return FEC_STATUS_SUCCESS;
+    } else {
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
-    if (discard_pak) {
-        *discard_pak = _discard_pak;
-    }
-    return true;
 }
 
 #else
@@ -623,45 +613,32 @@ static bool _fec_can_recover(const fec_rx_state_t *rx_state) {
 #endif
 }
 
-bool fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
+fec_status_t fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx) {
     fec_int_t n = rx_state->n;
-    bool _can_recover;
-    bool _discard_pak;
 
     if (idx >= n + rx_state->k) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
 
-    _can_recover = _fec_can_recover(rx_state);
-
-    // if can recover or duplicate
-    _discard_pak = _can_recover || (rx_state->received_paks_bitmap[idx / 8] & (1<<(idx & (8-1)))) != 0;
-
-    *can_recover = _can_recover;
-    *discard_pak = _discard_pak;
-    return true;
-}
-
-bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak) {
-    fec_int_t n = rx_state->n;
-    bool _can_recover;
-    bool _discard_pak = true;
-
-    if (idx >= n + rx_state->k) {
-        return false;
-    }
-
-    _can_recover = _fec_can_recover(rx_state);
-
-    if (_can_recover) {
-        goto valid_pak_end;
+    if (_fec_can_recover(rx_state)) {
+        return FEC_STATUS_CAN_DROP_ALREADY_RECOVERABLE;
     }
 
     if ((rx_state->received_paks_bitmap[idx / 8] & (1<<(idx & (8-1)))) != 0) {
-        goto valid_pak_end; // already received
+        return FEC_STATUS_CAN_DROP_DUP_PAK; // already received
     }
 
-    _discard_pak = false;
+    return FEC_STATUS_SUCCESS;
+}
+
+fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) {
+    fec_int_t n = rx_state->n;
+    fec_status_t status;
+
+    status = fec_rx_is_pak_needed(rx_state, idx);
+    if (status != FEC_STATUS_SUCCESS) {
+        return status;
+    }
 
     rx_state->received_paks_bitmap[idx / 8] |= (1<<(idx & (8-1)));
 
@@ -694,22 +671,17 @@ bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *ca
         rx_state->num_redundant++;
     }
 
-    _can_recover = _fec_can_recover(rx_state);
-
-valid_pak_end:
-    if (can_recover) {
-        *can_recover = _can_recover;
+    if (_fec_can_recover(rx_state)) {
+        return FEC_STATUS_SUCCESS;
+    } else {
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
-    if (discard_pak) {
-        *discard_pak = _discard_pak;
-    }
-    return true;
 }
 
 #endif
 
 // TODO: idx can be fec_int_t
-bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak) {
+fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak) {
     fec_idx_t n = tx_state->n;
     size_t pak_len = tx_state->pak_len;
     fec_idx_t i;
@@ -717,25 +689,25 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cac
     unaligend_fec_int_t* out_pak = (unaligend_fec_int_t*)pak;
 
     if (n == 0) {
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     // subtract can't underflow cause n <= (((fec_idx_t)1)<<(sizeof(fec_int_t)*8))
     // idx = "k" - 1
     // so we check n + k - 1 <= MAX_FEC_INT + 1
     if (idx > (((fec_idx_t)1)<<(sizeof(fec_int_t)*8)) - n) {
-        return false;
+        return FEC_STATUS_INVALID_PARAMS;
     }
 
     // inv_arr_sz is a power of 2 so this comparision is ok
     if (inv_cache->inv_arr_sz < n + idx) {
-        return false;
+        return FEC_STATUS_INV_CACHE_TOO_SMALL;
     }
 
     // TODO: this does not affect the time complexity of the function, but maybe remember number in struct
     for (i = 0; i < n; i++) {
         if (tx_state->paks[i] == NULL) {
-            return false;
+            return FEC_STATUS_MORE_PACKETS_NEEDED;
         }
     }
 
@@ -761,7 +733,7 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cac
                 out_pak[j] = poly_add(out_pak[j], pak[j]);
             }
         }
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     for (i = 0; i < n; i++) {
@@ -776,12 +748,12 @@ bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cac
         }
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #ifndef FEC_MIN_MEM
 #ifndef FEC_LARGE_K
-bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
+fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
     size_t pak_len = rx_state->pak_len;
 
@@ -794,18 +766,18 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
     size_t ii;
 
     if (rx_state->num_redundant < num_y_missing) {
-        return false;
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
 
     if (num_y_missing == 0) {
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     // n == 0 -> num_y_missing == 0
     // k == 0 -> rx_state->num_redundant == 0 -> rx_state->num_redundant < num_y_missing
     // here n,k > 0, so can't underflow
     if (inv_cache->inv_arr_sz < n + rx_state->k - 1) {
-        return false;
+        return FEC_STATUS_INV_CACHE_TOO_SMALL;
     }
 
     has_one_row = rx_state->redundancy_paks[0] != NULL;
@@ -923,12 +895,12 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
         rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #else
 
-bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
+fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
     size_t pak_len = rx_state->pak_len;
 
@@ -942,18 +914,18 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
     size_t ii;
 
     if (rx_state->num_info + rx_state->num_redundant + (rx_state->ones_pak != NULL) < n) {
-        return false;
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
 
     if (num_y_missing == 0) {
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     // n == 0 -> num_y_missing == 0
     // k == 0 -> rx_state->num_info + 0 + 0 < n
     // here n,k > 0, so can't underflow
     if (inv_cache->inv_arr_sz < n + rx_state->k - 1) {
-        return false;
+        return FEC_STATUS_INV_CACHE_TOO_SMALL;
     }
 
     has_one_row = (rx_state->ones_pak != NULL);
@@ -1078,7 +1050,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
         }
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #endif
@@ -1087,7 +1059,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
 
 #ifndef FEC_LARGE_K
 
-bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
+fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
     size_t pak_len = rx_state->pak_len;
 
@@ -1100,18 +1072,18 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
     size_t ii;
 
     if (rx_state->num_redundant < num_y_missing) {
-        return false;
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
 
     if (num_y_missing == 0) {
-        return true;
+        return FEC_STATUS_SUCCESS;
     }
 
     // n == 0 -> num_y_missing == 0
     // k == 0 -> rx_state->num_redundant == 0 -> rx_state->num_redundant < num_y_missing
     // here n,k > 0, so can't underflow
     if (inv_cache->inv_arr_sz < n + rx_state->k - 1) {
-        return false;
+        return FEC_STATUS_INV_CACHE_TOO_SMALL;
     }
 
     has_one_row = rx_state->redundancy_paks[0] != NULL;
@@ -1240,7 +1212,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
         rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
     }
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #else
@@ -1464,7 +1436,7 @@ static void PERF_DEBUG_ATTRS memswap(unaligend_fec_int_t* a, unaligend_fec_int_t
 }
 #endif
 
-bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
+fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
     size_t pak_len = rx_state->pak_len;
 
@@ -1482,7 +1454,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
     size_t ii;
 
     if (!_fec_can_recover(rx_state)) {
-        return false;
+        return FEC_STATUS_MORE_PACKETS_NEEDED;
     }
 
     if (num_y_missing == 0) {
@@ -1493,7 +1465,7 @@ bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cach
     // k == 0 -> rx_state->num_redundant == 0 -> rx_state->num_redundant < num_y_missing
     // here n,k > 0, so can't underflow
     if (inv_cache->inv_arr_sz < n + rx_state->k - 1) {
-        return false;
+        return FEC_STATUS_INV_CACHE_TOO_SMALL;
     }
 
 #ifndef FEC_USER_GIVEN_BUFFER
@@ -1757,7 +1729,7 @@ reorder_packets:
     start_time = get_timestamp();
 #endif
 
-    return true;
+    return FEC_STATUS_SUCCESS;
 }
 
 #endif

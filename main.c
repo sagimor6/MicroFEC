@@ -126,12 +126,12 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     TRACE("--0--\n");
     start_time = get_timestamp();
 
-    CHECK(fec_inv_cache_init(&inv_cache, n, k));
+    CHECK(fec_inv_cache_init(&inv_cache, n, k) == FEC_STATUS_SUCCESS);
     inited_inv_cache = true;
-    CHECK(fec_tx_init(&tx_state, n, pak_len));
+    CHECK(fec_tx_init(&tx_state, n, pak_len) == FEC_STATUS_SUCCESS);
     inited_tx_state = true;
 #ifndef FEC_USER_GIVEN_BUFFER
-    CHECK(fec_rx_init(&rx_state, n, k, pak_len));
+    CHECK(fec_rx_init(&rx_state, n, k, pak_len) == FEC_STATUS_SUCCESS);
 #else
     CHECK(fec_rx_init(&rx_state, n, k, pak_len, rx_dest_buf));
 #endif
@@ -142,7 +142,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     start_time = get_timestamp();
 
     for (i = 0; i < n; i++) {
-        fec_tx_add_info_pak(&tx_state, &paks[i*pak_len], i);
+        CHECK(fec_tx_add_info_pak(&tx_state, &paks[i*pak_len], i) ==  FEC_STATUS_SUCCESS);
     }
 
     end_time = get_timestamp();
@@ -150,7 +150,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     start_time = get_timestamp();
 
     for (i = 0; i < k; i++) {
-        fec_tx_get_redundancy_pak(&tx_state, &inv_cache, i, &r_paks[i*pak_len]);
+        CHECK(fec_tx_get_redundancy_pak(&tx_state, &inv_cache, i, &r_paks[i*pak_len]) == FEC_STATUS_SUCCESS);
     }
 
     end_time = get_timestamp();
@@ -159,31 +159,36 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 
     for (i = 0; i < n; i++) {
         unsigned int idx = rcv_idxs[i];
-        bool can_recover;
-        bool can_discard;
+        fec_status_t status;
         
         if (idx < n) {
-            CHECK(fec_rx_add_pak(&rx_state, &paks[idx*pak_len], idx, &can_recover, &can_discard));
+            status = fec_rx_add_pak(&rx_state, &paks[idx*pak_len], idx);
         } else {
-            CHECK(fec_rx_add_pak(&rx_state, &r_paks[(idx - n)*pak_len], idx, &can_recover, &can_discard));
+            status = fec_rx_add_pak(&rx_state, &r_paks[(idx - n)*pak_len], idx);
         }
-        CHECK(can_recover == (i == n - 1));
-        CHECK(!can_discard);
+        if (i == n - 1) {
+            CHECK(status == FEC_STATUS_SUCCESS);
+        } else {
+            CHECK(status == FEC_STATUS_MORE_PACKETS_NEEDED);
+        }
         
         if (idx < n) {
-            CHECK(fec_rx_add_pak(&rx_state, &paks[idx*pak_len], idx, &can_recover, &can_discard));
+            status = fec_rx_add_pak(&rx_state, &paks[idx*pak_len], idx);
         } else {
-            CHECK(fec_rx_add_pak(&rx_state, &r_paks[(idx - n)*pak_len], idx, &can_recover, &can_discard));
+            status = fec_rx_add_pak(&rx_state, &r_paks[(idx - n)*pak_len], idx);
         }
-        CHECK(can_recover == (i == n - 1));
-        CHECK(can_discard);
+        if (i == n - 1) {
+            CHECK(status == FEC_STATUS_CAN_DROP_ALREADY_RECOVERABLE);
+        } else {
+            CHECK(status == FEC_STATUS_CAN_DROP_DUP_PAK);
+        }
     }
 
     end_time = get_timestamp();
     TRACE("--fec_rx_add_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
     start_time = get_timestamp();
 
-    CHECK(fec_rx_fill_missing_paks(&rx_state, &inv_cache));
+    CHECK(fec_rx_fill_missing_paks(&rx_state, &inv_cache) == FEC_STATUS_SUCCESS);
 
     end_time = get_timestamp();
     TRACE("--fec_rx_fill_missing_paks-- %f\n", (end_time - start_time) / ((double)1000000000));

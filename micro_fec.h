@@ -20,6 +20,16 @@ typedef uint32_t fec_idx_t;
 
 typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
 
+typedef enum {
+    FEC_STATUS_SUCCESS,
+    FEC_STATUS_OUT_OF_MEMORY,
+    FEC_STATUS_INVALID_PARAMS,
+    FEC_STATUS_INV_CACHE_TOO_SMALL,
+    FEC_STATUS_MORE_PACKETS_NEEDED,
+    FEC_STATUS_CAN_DROP_DUP_PAK,
+    FEC_STATUS_CAN_DROP_ALREADY_RECOVERABLE,
+} fec_status_t;
+
 typedef struct {
     // n+k-1 <= (1<<(sizeof(fec_int_t)*8))
 
@@ -90,23 +100,23 @@ typedef struct {
 #define EXPORT 
 #endif
 
-EXPORT bool fec_inv_cache_init(fec_inv_cache_t *inv_cache, fec_idx_t n, fec_idx_t k);
-EXPORT bool fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1);
+EXPORT fec_status_t fec_inv_cache_init(fec_inv_cache_t *inv_cache, fec_idx_t n, fec_idx_t k);
+EXPORT fec_status_t fec_inv_cache_init_raw(fec_inv_cache_t *inv_cache, fec_idx_t n_k_1);
 EXPORT void fec_inv_cache_destroy(fec_inv_cache_t *inv_cache);
 
-EXPORT bool fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len);
-EXPORT bool fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
-EXPORT bool fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak);
+EXPORT fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len);
+EXPORT fec_status_t fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
+EXPORT fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak);
 EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
 #ifndef FEC_USER_GIVEN_BUFFER
-EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len);
+EXPORT fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len);
 #else
-EXPORT bool fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len, void* dest_buf);
+EXPORT fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, size_t pak_len, void* dest_buf);
 #endif
-EXPORT bool fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx, bool *can_recover, bool *discard_pak);
-EXPORT bool fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx, bool *can_recover, bool *discard_pak);
-EXPORT bool fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache);
+EXPORT fec_status_t fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx);
+EXPORT fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx);
+EXPORT fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache);
 #ifndef FEC_USER_GIVEN_BUFFER
 EXPORT void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
 #endif
