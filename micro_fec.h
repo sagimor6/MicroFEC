@@ -55,6 +55,8 @@ typedef struct {
     fec_idx_t k;
     size_t pak_len;
 
+    fec_int_t max_x; // maximum k - 1
+
 #ifndef FEC_LARGE_K
     unaligend_fec_int_t** info_paks; // size = n
     unaligend_fec_int_t** redundancy_paks; // size = real k
@@ -116,6 +118,7 @@ EXPORT fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t
 #endif
 EXPORT fec_status_t fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx);
 EXPORT fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx);
+EXPORT fec_status_t fec_rx_get_needed_inv_cache_size(fec_rx_state_t *rx_state, fec_idx_t* n_k_1);
 EXPORT fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache);
 #ifndef FEC_USER_GIVEN_BUFFER
 EXPORT void** fec_rx_get_info_paks(const fec_rx_state_t *rx_state);
