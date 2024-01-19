@@ -133,7 +133,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 #ifndef FEC_USER_GIVEN_BUFFER
     CHECK(fec_rx_init(&rx_state, n, k, pak_len) == FEC_STATUS_SUCCESS);
 #else
-    CHECK(fec_rx_init(&rx_state, n, k, pak_len, rx_dest_buf));
+    CHECK(fec_rx_init(&rx_state, n, k, pak_len, rx_dest_buf) == FEC_STATUS_SUCCESS);
 #endif
     inited_rx_state = true;
 
