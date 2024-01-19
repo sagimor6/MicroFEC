@@ -90,8 +90,8 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     fec_int_t *r_paks = NULL;
     unsigned int *rcv_idxs = NULL;
     unsigned int i;
-    bool inited_state = false;
-    fec_state_t state;
+    bool inited_inv_cache = false;
+    fec_inv_cache_t inv_cache;
     bool inited_tx_state = false;
     fec_tx_state_t tx_state;
     bool inited_rx_state = false;
@@ -126,14 +126,14 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     TRACE("--0--\n");
     start_time = get_timestamp();
 
-    CHECK(fec_init(&state, n, k, pak_len));
-    inited_state = true;
-    CHECK(fec_tx_init(&tx_state, &state));
+    CHECK(fec_inv_cache_init(&inv_cache, n, k));
+    inited_inv_cache = true;
+    CHECK(fec_tx_init(&tx_state, n, pak_len));
     inited_tx_state = true;
 #ifndef FEC_USER_GIVEN_BUFFER
-    CHECK(fec_rx_init(&rx_state, &state));
+    CHECK(fec_rx_init(&rx_state, n, k, pak_len));
 #else
-    CHECK(fec_rx_init(&rx_state, &state, rx_dest_buf));
+    CHECK(fec_rx_init(&rx_state, n, k, pak_len, rx_dest_buf));
 #endif
     inited_rx_state = true;
 
@@ -150,7 +150,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     start_time = get_timestamp();
 
     for (i = 0; i < k; i++) {
-        fec_tx_get_redundancy_pak(&tx_state, i, &r_paks[i*pak_len]);
+        fec_tx_get_redundancy_pak(&tx_state, &inv_cache, i, &r_paks[i*pak_len]);
     }
 
     end_time = get_timestamp();
@@ -183,7 +183,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     TRACE("--fec_rx_add_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
     start_time = get_timestamp();
 
-    CHECK(fec_rx_fill_missing_paks(&rx_state));
+    CHECK(fec_rx_fill_missing_paks(&rx_state, &inv_cache));
 
     end_time = get_timestamp();
     TRACE("--fec_rx_fill_missing_paks-- %f\n", (end_time - start_time) / ((double)1000000000));
@@ -225,8 +225,8 @@ cleanup:
         fec_tx_destroy(&tx_state);
     }
 
-    if (inited_state) {
-        fec_destroy(&state);
+    if (inited_inv_cache) {
+        fec_inv_cache_destroy(&inv_cache);
     }
 }
 

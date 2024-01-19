@@ -7,12 +7,12 @@ L = fixed packet length.
 k = number of info packets lost in the transmission.  
   
 structs:  
-fec_state_t - serves as cache for inverses. O(N + K) space.  
+fec_inv_cache_t - serves as cache for inverses. O(N + K) space.  
 fec_tx_state_t - O(N) space.  
 fec_rx_state_t - O(N + K) space.  
   
 functions:  
-fec_init - O(N + K)  
+fec_inv_cache_init - O(N + K)  
 fec_tx_init - O(1)  
 fec_tx_add_info_pak - O(1)  
 fec_tx_get_redundancy_pak - O(N\*L)  
