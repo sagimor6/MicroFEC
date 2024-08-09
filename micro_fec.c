@@ -1439,6 +1439,145 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_int_t* recovered, const fec_int
 }
 
 
+
+
+
+
+fec_int_t PERF_DEBUG_ATTRS __fec_rx_row_op(const unaligend_fec_int_t * const* pak_arr, fec_idx_t num, size_t ii, const fec_int_t* xy_arr, fec_int_t missing_y_i, const fec_int_t *inv_arr, fec_int_t ones_pak_ii) {
+    fec_idx_t j;
+    //fec_int_t res = ones_pak_ii;
+
+    inv_arr -= 1;
+
+    // for (j = 0; j < num; j++) {
+    //     res = poly_add(res, poly_mul(pak_arr[j][ii], inv_arr[poly_add(xy_arr[j], missing_y_i)]));
+    // }
+
+    u32x8 sum1 = {0};
+
+    u32x8 cc1 = {0,1,2,3,4,5,6,7};
+    u32x8 cc2 = {8,9,10,11,12,13,14,15};
+
+    for (j = 0; j < num; j++) {
+        fec_int_t a = pak_arr[j][ii];
+        fec_int_t b = inv_arr[poly_add(xy_arr[j], missing_y_i)];
+
+        u32x8 aa1 = {a,a,a,a,a,a,a,a};
+        u32x8 aa2 = {a,a,a,a,a,a,a,a};
+        u32x8 bb1 = {b,b,b,b,b,b,b,b};
+        u32x8 bb2 = {b,b,b,b,b,b,b,b};
+        
+        aa1 <<= cc1;
+        bb1 = -((bb1 >> cc1) & 1);
+        aa2 <<= cc2;
+        bb2 = -((bb2 >> cc2) & 1);
+        
+        sum1 ^= (aa1 & bb1) ^ (aa2 & bb2);
+    }
+
+    u32x4 sum2 = (u32x4)(_mm256_extracti128_si256((__m256i)sum1, 0) ^ _mm256_extracti128_si256((__m256i)sum1, 1));
+    uint32_t sum = sum2[0] ^ sum2[1] ^ sum2[2] ^ sum2[3];
+
+    uint16_t res = sum;
+    uint32_t carry = sum >> 16;
+
+    carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+    res ^= carry;
+
+    carry = carry >> 16;
+    
+    res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+    return res ^ ones_pak_ii;
+
+    // //fec_idx_t i;
+    // u16x16 res_arr = {0};
+    // for (j = 0; j < num; j+=16) {
+    //     u16x16 aa,bb;
+
+    //     // fec_idx_t j;
+    //     // fec_idx_t num_to_copy = MIN(16, num_y_missing - i);
+    //     // for(j = 0; j < num_to_copy; j++) {
+    //     //     bb[j] = inv_arr[poly_add(pak_xy, missing_y[i+j])];
+    //     // }
+
+    //     uint16_t __attribute__((aligned(32))) tmp_arr[16] = {0};
+    //     uint16_t __attribute__((aligned(32))) tmp_arr2[16] = {0};
+    //     fec_idx_t jj;
+    //     fec_idx_t num_to_copy = MIN(16U, num - j);
+    //     for(jj = 0; jj < num_to_copy; jj++) {
+    //         tmp_arr[jj] = inv_arr[poly_add(xy_arr[j+jj], missing_y_i)];
+    //         tmp_arr2[jj] = pak_arr[j+jj][ii];
+    //     }
+    //     aa = (u16x16)_mm256_load_si256((__m256i*)tmp_arr);
+    //     bb = (u16x16)_mm256_load_si256((__m256i*)tmp_arr2);
+        
+
+    //     // bb[0] = inv_arr[poly_add(pak_xy, missing_y[i+0])];
+    //     // bb[1] = inv_arr[poly_add(pak_xy, missing_y[i+1])];
+    //     // bb[2] = inv_arr[poly_add(pak_xy, missing_y[i+2])];
+    //     // bb[3] = inv_arr[poly_add(pak_xy, missing_y[i+3])];
+    //     // bb[4] = inv_arr[poly_add(pak_xy, missing_y[i+4])];
+    //     // bb[5] = inv_arr[poly_add(pak_xy, missing_y[i+5])];
+    //     // bb[6] = inv_arr[poly_add(pak_xy, missing_y[i+6])];
+    //     // bb[7] = inv_arr[poly_add(pak_xy, missing_y[i+7])];
+    //     // bb[8] = inv_arr[poly_add(pak_xy, missing_y[i+8])];
+    //     // bb[9] = inv_arr[poly_add(pak_xy, missing_y[i+9])];
+    //     // bb[10] = inv_arr[poly_add(pak_xy, missing_y[i+10])];
+    //     // bb[11] = inv_arr[poly_add(pak_xy, missing_y[i+11])];
+    //     // bb[12] = inv_arr[poly_add(pak_xy, missing_y[i+12])];
+    //     // bb[13] = inv_arr[poly_add(pak_xy, missing_y[i+13])];
+    //     // bb[14] = inv_arr[poly_add(pak_xy, missing_y[i+14])];
+    //     // bb[15] = inv_arr[poly_add(pak_xy, missing_y[i+15])];
+    //     u16x16 cc = poly_mul16(aa, bb);
+
+    //     res_arr ^= cc;
+
+    //     // recovered[i+0] ^= cc[0];
+    //     // recovered[i+1] ^= cc[1];
+    //     // recovered[i+2] ^= cc[2];
+    //     // recovered[i+3] ^= cc[3];
+    //     // recovered[i+4] ^= cc[4];
+    //     // recovered[i+5] ^= cc[5];
+    //     // recovered[i+6] ^= cc[6];
+    //     // recovered[i+7] ^= cc[7];
+    //     // recovered[i+8] ^= cc[8];
+    //     // recovered[i+9] ^= cc[9];
+    //     // recovered[i+10] ^= cc[10];
+    //     // recovered[i+11] ^= cc[11];
+    //     // recovered[i+12] ^= cc[12];
+    //     // recovered[i+13] ^= cc[13];
+    //     // recovered[i+14] ^= cc[14];
+    //     // recovered[i+15] ^= cc[15];
+    // }
+
+    // fec_idx_t res = ones_pak_ii;
+    // for (j = 0; j < 16; j++) {
+    //     res ^= res_arr[j];
+    // }
+
+    // return res;
+
+
+
+    // __m128i tmp1 = _mm256_extracti128_si256((__m256i)res_arr, 0);
+    // __m128i tmp2 = _mm256_extracti128_si256((__m256i)res_arr, 1);
+    // tmp1 ^= tmp2;
+
+    // uint64_t tmp3 = _mm_extract_epi64(tmp1, 0);
+    // uint64_t tmp4 = _mm_extract_epi64(tmp1, 1);
+    // tmp3 ^= tmp4;
+
+    // tmp3 ^= (tmp3>>32);
+
+    // tmp3 ^= (tmp3>>16);
+
+    // return tmp3 ^ ones_pak_ii;
+}
+
+
+
 #ifdef PERF_DEBUG
 static uint64_t get_timestamp() {
     struct timespec tp = {0};
@@ -1460,6 +1599,306 @@ static void PERF_DEBUG_ATTRS memswap(unaligend_fec_int_t* a, unaligend_fec_int_t
     }
 }
 #endif
+
+char gggg[] = "aaaaaaaaa";
+char hhhh[] = "bbbbbbbbb";
+
+void __fec_rx_one_op(fec_idx_t num, fec_int_t* present_y, unaligend_fec_int_t **pak_arr, fec_int_t *tmp_recovered_ints, fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* inv_cache, size_t ii) {
+    // fec_idx_t j;
+    // for (j = 0; j < num; j++) {
+    //     fec_int_t xy_j = present_y[j];
+    //     fec_int_t xy_pak_arr_j_ii = pak_arr[j][ii];
+    //     // for (i = 0; i < num_y_missing; i++) {
+    //     //     fec_int_t missing_y_i = missing_y[i];
+    //     //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+    //     // }
+    //     volatile char* volatile aaa = gggg;
+    //     aaa = aaa + 1;
+    //     *aaa = *aaa;
+    //     __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_ii, xy_j);
+
+    //     aaa = hhhh;
+    //     aaa = aaa + 1;
+    //     *aaa = *aaa;
+    // }
+
+    fec_idx_t i,j,k,m;
+
+    fec_int_t prefetch[32];
+
+    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
+
+    u32x8 cc1 = {0,1,2,3,4,5,6,7};
+    u32x8 cc2 = {8,9,10,11,12,13,14,15};
+
+    for (j = 0; j < num; j += sizeof(prefetch)/sizeof(prefetch[0])) {
+        fec_idx_t num_k = MIN(sizeof(prefetch)/sizeof(prefetch[0]), num - j);
+
+        for(k = 0; k < num_k; k++) {
+            prefetch[k] = pak_arr[j + k][ii];
+        }
+
+        for(i = 0; i < num_y_missing; i += 7) {
+            
+            u32x8 sum1[7] = {0};
+
+            fec_idx_t num_m = MIN(sizeof(sum1)/sizeof(sum1[0]), num_y_missing - i);
+
+            for (k = 0; k < num_k; k++) {
+                fec_int_t b = prefetch[k];
+                u32x8 bb1 = {b,b,b,b,b,b,b,b};
+                u32x8 bb2 = {b,b,b,b,b,b,b,b};
+                bb1 = -((bb1 >> cc1) & 1);
+                bb2 = -((bb2 >> cc2) & 1);
+
+                for(m = 0; m < sizeof(sum1)/sizeof(sum1[0]); m++) {
+                    fec_int_t missing_y_i = missing_y[m < num_m ? i+m: i];
+                    fec_int_t a = inv_arr[poly_add(present_y[j+k], missing_y_i)];
+
+                    u32x8 aa1 = {a,a,a,a,a,a,a,a};
+                    u32x8 aa2 = {a,a,a,a,a,a,a,a};
+                    
+                    aa1 <<= cc1;
+                    aa2 <<= cc2;
+                    
+                    sum1[m] ^= (aa1 & bb1);
+                    sum1[m] ^= (aa2 & bb2);
+                }
+            }
+
+            for(m = 0; m < num_m; m++) {
+                u32x4 sum2 = (u32x4)(_mm256_extracti128_si256((__m256i)sum1[m], 0) ^ _mm256_extracti128_si256((__m256i)sum1[m], 1));
+                uint32_t sum = sum2[0] ^ sum2[1] ^ sum2[2] ^ sum2[3];
+
+                uint16_t res = sum;
+                uint32_t carry = sum >> 16;
+
+                carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+                res ^= carry;
+
+                carry = carry >> 16;
+                
+                res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+                tmp_recovered_ints[i+m] ^= res;
+            }
+        }
+    }
+
+}
+
+#include "preprocessor.h"
+
+#define UNROLL_1(x) x
+#define UNROLL_2(x) UNROLL_1(x) UNROLL_1(x)
+#define UNROLL_4(x) UNROLL_2(x) UNROLL_2(x)
+#define UNROLL_8(x) UNROLL_4(x) UNROLL_4(x)
+#define UNROLL_16(x) UNROLL_8(x) UNROLL_8(x)
+
+#define UNROLL_N(N, x) \
+    if(N & 16) { UNROLL_16(x) } \
+    if(N & 8) { UNROLL_8(x) } \
+    if(N & 4) { UNROLL_4(x) } \
+    if(N & 2) { UNROLL_2(x) } \
+    if(N & 1) { UNROLL_1(x) }
+
+
+#define ONEREP_1 a
+#define ONEREP_2 ONEREP_1##ONEREP_1
+#define ONEREP_4 ONEREP_2##ONEREP_2
+#define ONEREP_8 ONEREP_4##ONEREP_4
+#define ONEREP_16 ONEREP_8##ONEREP_8
+
+
+#define UNROLL_LOOP(N, init, inc, x) init UNROLL_N(N, {x inc})
+
+void __attribute__((noinline)) __fec_rx_one_op2(fec_idx_t num, fec_int_t* present_y, unaligend_fec_int_t **pak_arr, fec_int_t *tmp_recovered_ints, fec_int_t *missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* inv_cache, size_t ii) {
+
+    fec_idx_t i,j,k,m;
+
+    fec_int_t prefetch[32];
+
+    u64x2 poly_g = {POLY_G, 0};
+
+    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
+
+    #pragma GCC unroll 1
+    for (j = 0; j < num; j += sizeof(prefetch)/sizeof(prefetch[0])) {
+        fec_idx_t num_k = MIN(sizeof(prefetch)/sizeof(prefetch[0]), num - j);
+
+        #pragma GCC unroll 1
+        for(k = 0; k < num_k; k++) {
+            prefetch[k] = pak_arr[j + k][ii];
+        }
+
+        #define NUM_UNROLLS 16
+
+        #pragma GCC unroll 1
+        for(i = 0; i < num_y_missing; i += 2*NUM_UNROLLS) {
+            
+            uint64_t sum1[NUM_UNROLLS] = {0};
+            #define MMM(i, _) uint64_t _GLUE(sum1_,i) = 0;
+            EVAL(REPEAT(NUM_UNROLLS, MMM, ~));
+            #undef MMM
+
+            fec_idx_t num_m = MIN(2*NUM_UNROLLS, num_y_missing - i);
+
+            #pragma GCC unroll 1
+            for (k = 0; k < num_k; k++) {
+                fec_int_t b = prefetch[k];
+                u64x2 bb = {0};
+                bb[0] = b;
+
+                // #pragma unroll NUM_UNROLLS
+                // for(m = 0; m < 2*sizeof(sum1)/sizeof(sum1[0]); m+=2) {
+                //     fec_int_t missing_y_i = missing_y[m < num_m ? i+m:i];
+                //     fec_int_t missing_y_i_2 = missing_y[m + 1 < num_m ? i+m+1:i];
+                //     fec_int_t a = inv_arr[poly_add(present_y[j+k], missing_y_i)];
+                //     fec_int_t a2 = inv_arr[poly_add(present_y[j+k], missing_y_i_2)];
+                //     u32x4 aa = {0};
+                    
+                //     aa[0] = a;
+                //     aa[1] = a2;
+
+                //     sum1[m/2] ^= ((u64x2)_mm_clmulepi64_si128((__m128i)aa, (__m128i)bb, 0))[0];
+                // }
+
+                // UNROLL_LOOP(NUM_UNROLLS, {m = 0;}, {m += 2;}, {
+                //     fec_int_t missing_y_i = missing_y[m < num_m ? i+m:i];
+                //     fec_int_t missing_y_i_2 = missing_y[m + 1 < num_m ? i+m+1:i];
+                //     fec_int_t a = inv_arr[poly_add(present_y[j+k], missing_y_i)];
+                //     fec_int_t a2 = inv_arr[poly_add(present_y[j+k], missing_y_i_2)];
+                //     u32x4 aa = {0};
+                    
+                //     aa[0] = a;
+                //     aa[1] = a2;
+
+                //     sum1[m/2] ^= ((u64x2)_mm_clmulepi64_si128((__m128i)aa, (__m128i)bb, 0))[0];
+                // });
+
+                #define MMM(m2, _) { \
+                    fec_int_t missing_y_i = missing_y[m2*2 < num_m ? i+m2*2:i]; \
+                    fec_int_t missing_y_i_2 = missing_y[m2*2 + 1 < num_m ? i+m2*2+1:i]; \
+                    fec_int_t a = inv_arr[poly_add(present_y[j+k], missing_y_i)]; \
+                    fec_int_t a2 = inv_arr[poly_add(present_y[j+k], missing_y_i_2)]; \
+                    u32x4 aa = {0}; \
+                     \
+                    aa[0] = a; \
+                    aa[1] = a2; \
+                     \
+                    _GLUE(sum1_,m2) ^= ((u64x2)_mm_clmulepi64_si128((__m128i)aa, (__m128i)bb, 0))[0]; \
+                }
+                EVAL(REPEAT(NUM_UNROLLS, MMM, ~));
+                #undef MMM
+                
+
+            }
+
+            
+            //poly_g[0] = POLY_G;
+
+            // #pragma unroll NUM_UNROLLS
+            // for(m = 0; m < num_m; m+=2) {
+            //     uint64_t sum = sum1[m/2];
+            //     u64x2 aa = {0};
+            //     aa[0] = sum;
+
+            //     u32x4 bb = (u32x4)_mm_clmulepi64_si128((__m128i)(((u32x4)aa) >> 16), (__m128i)poly_g, 0);
+            //     bb ^= (u32x4)_mm_clmulepi64_si128((__m128i)(bb >> 16), (__m128i)poly_g, 0);
+            //     bb ^= (u32x4)aa;
+
+            //     uint16_t res1 = ((u16x8)bb)[0];
+            //     uint16_t res2 = ((u16x8)bb)[2];
+
+            //     tmp_recovered_ints[i+m] ^= res1;
+            //     tmp_recovered_ints[i+m+1] ^= res2;
+            // }
+
+            // UNROLL_LOOP(NUM_UNROLLS, {m = 0;}, {m += 2;}, {
+            //     if (m < num_m) {
+            //         uint64_t sum = sum1[m/2];
+            //         u64x2 aa = {0};
+            //         aa[0] = sum;
+
+            //         u32x4 bb = (u32x4)_mm_clmulepi64_si128((__m128i)(((u32x4)aa) >> 16), (__m128i)poly_g, 0);
+            //         bb ^= (u32x4)_mm_clmulepi64_si128((__m128i)(bb >> 16), (__m128i)poly_g, 0);
+            //         bb ^= (u32x4)aa;
+
+            //         uint16_t res1 = ((u16x8)bb)[0];
+            //         uint16_t res2 = ((u16x8)bb)[2];
+
+            //         tmp_recovered_ints[i+m] ^= res1;
+            //         tmp_recovered_ints[i+m+1] ^= res2;
+            //     }
+            // });
+
+            #define MMM(m2, _) { \
+                /*if (m2*2 < num_m) {*/ \
+                    uint64_t sum = _GLUE(sum1_,m2); \
+                    u64x2 aa = {0}; \
+                    aa[0] = sum; \
+                     \
+                    u32x4 bb = (u32x4)_mm_clmulepi64_si128((__m128i)(((u32x4)aa) >> 16), (__m128i)poly_g, 0); \
+                    bb ^= (u32x4)_mm_clmulepi64_si128((__m128i)(bb >> 16), (__m128i)poly_g, 0); \
+                    bb ^= (u32x4)aa; \
+                     \
+                    uint16_t res1 = ((u16x8)bb)[0]; \
+                    uint16_t res2 = ((u16x8)bb)[2]; \
+                     \
+                    tmp_recovered_ints[i+m2*2] ^= res1; \
+                    tmp_recovered_ints[i+m2*2+1] ^= res2; \
+                /*}*/ \
+            }
+            EVAL(REPEAT(NUM_UNROLLS, MMM, ~));
+            #undef MMM
+            // #define MMM(m2, _) { \
+            //     _GLUE(the_label, m2): \
+            //     case m2*2+1: \
+            //     case m2*2+2: { \
+            //         uint64_t sum = _GLUE(sum1_,m2); \
+            //         u64x2 aa = {0}; \
+            //         aa[0] = sum; \
+            //          \
+            //         u32x4 bb = (u32x4)_mm_clmulepi64_si128((__m128i)(((u32x4)aa) >> 16), (__m128i)poly_g, 0); \
+            //         bb ^= (u32x4)_mm_clmulepi64_si128((__m128i)(bb >> 16), (__m128i)poly_g, 0); \
+            //         bb ^= (u32x4)aa; \
+            //          \
+            //         uint16_t res1 = ((u16x8)bb)[0]; \
+            //         uint16_t res2 = ((u16x8)bb)[2]; \
+            //          \
+            //         tmp_recovered_ints[i+m2*2] ^= res1; \
+            //         tmp_recovered_ints[i+m2*2+1] ^= res2; \
+            //         IF(m2)(goto GLUE(the_label, DEC(m2));, break;) \
+            //     } \
+            // }
+            // switch(num_m) {
+            // EVAL(REPEAT(NUM_UNROLLS, MMM, ~));
+            // }
+            // #undef MMM
+        }
+    }
+
+}
+
+void __attribute__((noinline)) __attribute__((visibility("default"))) blabla(fec_idx_t num_y_missing, fec_idx_t n, size_t pak_len, bool has_one_row) {
+    size_t i;
+    uint64_t gggg[16] = {0};
+    for(i = 0; i < num_y_missing*(n - has_one_row)*pak_len; i++) {
+        u64x2 aa = {0};
+        u64x2 bb = {0};
+        u64x2 cc;
+        aa[0] = i << 1;
+        bb[0] = i << 2;
+        cc = (u64x2)_mm_clmulepi64_si128((__m128i)aa, (__m128i)bb, 0);
+        gggg[i & 0xF] ^= cc[0];
+    }
+    volatile uint64_t aaaa = 0;
+    for(i = 0; i < 16; i++) {
+        aaaa += gggg[i];
+    }
+    aaaa = aaaa;
+}
 
 fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
@@ -1617,10 +2056,12 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         //     fec_int_t missing_y_i = missing_y[i];
         //     fec_int_t res;
 
-        //     res = ones_pak_ii;
-        //     for (j = 0; j < num_y_present + num_x_present; j++) {
-        //         res = poly_add(res, poly_mul(_GET_XY_PAK(j)[ii], _fec_inv(inv_cache, poly_add(present_y[j], missing_y_i))));
-        //     }
+        //     // res = ones_pak_ii;
+        //     // for (j = 0; j < num_y_present + num_x_present; j++) {
+        //     //     res = poly_add(res, poly_mul(_GET_XY_PAK(j)[ii], _fec_inv(inv_cache, poly_add(present_y[j], missing_y_i))));
+        //     // }
+
+        //     res = __fec_rx_row_op((const unaligend_fec_int_t* const*)y_pak_arr, num_y_present + num_x_present, ii, present_y, missing_y_i, inv_cache->inv_arr, ones_pak_ii);
 
         //     tmp_recovered_ints[i] = res;
         // }
@@ -1629,15 +2070,18 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
             tmp_recovered_ints[i] = ones_pak_ii;
         }
 
-        for (j = 0; j < num_y_present + num_x_present; j++) {
-            fec_int_t xy_j = present_y[j];
-            fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
-            // for (i = 0; i < num_y_missing; i++) {
-            //     fec_int_t missing_y_i = missing_y[i];
-            //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
-            // }
-            __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_ii, xy_j);
-        }
+        // for (j = 0; j < num_y_present + num_x_present; j++) {
+        //     fec_int_t xy_j = present_y[j];
+        //     fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
+        //     // for (i = 0; i < num_y_missing; i++) {
+        //     //     fec_int_t missing_y_i = missing_y[i];
+        //     //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+        //     // }
+        //     __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_ii, xy_j);
+        // }
+
+        // __fec_rx_one_op(num_y_present + num_x_present, present_y, y_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
+        __fec_rx_one_op2(num_y_present + num_x_present, present_y, y_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
 
         for (i = 0; i < num_y_missing; i++) {
             _GET_X_PAK(i)[ii] = tmp_recovered_ints[i];
