@@ -65,6 +65,16 @@ unsigned int* rand_unique_indexes(unsigned int n, unsigned int k) {
     return arr2;
 }
 
+uint32_t my_hash(const void* buf, size_t size) {
+    size_t i;
+    uint32_t res = 0;
+    for (i = 0; i < size; i++) {
+        res += ((const uint8_t*)buf)[i] * (i + 1);
+    }
+
+    return res;
+}
+
 void rand_fill(void* buf, size_t len) {
     size_t i;
     for (i = 0; i < len; i++) {
