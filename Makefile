@@ -12,9 +12,12 @@ CFLAGS += -pedantic-errors -Wno-pedantic -Wall -Wextra -Wnull-dereference -Waggr
 DEBUG_CFLAGS += -g
 #DEBUG_CFLAGS += -fsanitize=undefined -fsanitize=address 
 
-OPT_CFLAGS += -flto -ffat-lto-objects -ffunction-sections -fdata-sections -O2 -fvisibility=hidden
+OPT_CFLAGS += -ffunction-sections -fdata-sections -O3 -fvisibility=hidden
+OPT_CFLAGS += -falign-loops=32 -mbranches-within-32B-boundaries
+OPT_CFLAGS += -mtune=skylake
 OPT_CFLAGS += -mpclmul
-OPT_CFLAGS += -mavx2 -mtune=cannonlake
+OPT_CFLAGS +=  -mavx2 #-mno-sse2 -mno-sse3 -mno-sse4 -mno-sse4.1 -mno-sse4.2 -mno-avx2 -mno-avx -mno-sse -mno-mmx
+# OPT_CFLAGS += -mavx2
 # OPT_CFLAGS += -mavx
 # OPT_CFLAGS += -m32 -mno-sse2 -mno-sse3 -mno-sse4 -mno-sse4.1 -mno-sse4.2 -mno-avx2 -mno-avx -mno-sse -mno-mmx
 # OPT_CFLAGS += -march=armv8-a+crypto
@@ -31,13 +34,13 @@ all: $(BUILD)/libmicro_fec.so $(BUILD)/libmicro_fec.a fec_test
 
 .PHONY fec_test:
 fec_test: $(BUILD)/fec_test.elf
-	$(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf 1000 100 1400
+	$(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf 1000 200 50000
 
 $(BUILD)/:
 	mkdir -p $@
 
 $(BUILD)/fec_test.elf: main.c micro_fec.c | $(BUILD)/
-	$(CC) $(CFLAGS) $(DEBUG_CFLAGS) $(OPT_CFLAGS) $(OPT_LDFLAGS) $(CROSS_FLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(DEBUG_CFLAGS) $(OPT_CFLAGS) $(OPT_LDFLAGS) $(CROSS_FLAGS) -DN_BLOCK=$(N_BLOCK) -o $@ $^
 
 $(BUILD)/micro_fec.o_static: micro_fec.c | $(BUILD)/
 	#-flinker-output=nolto-rel

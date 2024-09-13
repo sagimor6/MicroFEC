@@ -83,6 +83,19 @@ void rand_fill(void* buf, size_t len) {
     }
 }
 
+#ifdef _WIN32
+#include <realtimeapiset.h>
+#include <processthreadsapi.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+uint64_t get_timestamp() {
+    uint64_t t;
+    CHECK(QueryThreadCycleTime(GetCurrentThread(), &t));
+    t /= 4;
+cleanup:
+    return t;
+}
+#else
 uint64_t get_timestamp() {
     struct timespec tp = {0};
     //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
@@ -91,6 +104,7 @@ uint64_t get_timestamp() {
 cleanup:
     return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
 }
+#endif
 
 void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     // const unsigned int n = 1000;
@@ -109,6 +123,13 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     uint64_t start_time, end_time;
 #ifdef FEC_USER_GIVEN_BUFFER
     fec_int_t *rx_dest_buf = NULL;
+#endif
+
+#ifdef _WIN32
+    // we want accuracy
+    CHECK(SetThreadAffinityMask(GetCurrentThread(), 1) != 0);
+    CHECK(SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS));
+    CHECK(SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL));
 #endif
 
     CHECK((pak_len % sizeof(fec_int_t)) == 0);
@@ -131,7 +152,13 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     rcv_idxs = rand_unique_indexes(n + k, n);
     CHECK(rcv_idxs != NULL);
 
-    rand_fill(paks, n * pak_len * sizeof(uint16_t));
+    //rand_fill(paks, n * pak_len * sizeof(uint16_t));
+
+    {
+        for(i = 0; i < n * pak_len; i++) {
+            paks[i] = i;
+        }
+    }
 
     TRACE("--0--\n");
     start_time = get_timestamp();

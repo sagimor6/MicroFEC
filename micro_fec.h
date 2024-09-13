@@ -41,14 +41,66 @@ typedef struct {
 
 } fec_inv_cache_t;
 
+//#define FEC_OPT_TYPE_CLMUL
+#define FEC_OPT_TYPE_AVX
+//#define FEC_OPT_TYPE_REG
+
+#if defined(FEC_OPT_TYPE_CLMUL)
+typedef uint32_t fec_perf_int_t;
+#elif defined(FEC_OPT_TYPE_AVX)
+typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
+#elif defined(FEC_OPT_TYPE_REG)
+typedef uint64_t fec_perf_int_t[4];
+#endif
+
+
+
+#if !defined(_FEC_NO_OPT)
+#if (defined(__PCLMUL__) && defined(__SSE2__)) && 0
+#define _FEC_USE_CLMUL
+#elif defined(__SSE2__)
+#define _FEC_USE_SSE2 // xmm or ymm based
+#elif defined(__x86_64__)
+#define _FEC_USE_64BIT
+#elif defined(__MMX__)
+#define _FEC_USE_MMX
+#elif defined(__i386__)
+#define _FEC_USE_32BIT
+#else
+#error all cases should be defined
+#endif
+#endif
+
+
+#if defined(_FEC_USE_CLMUL)
+typedef uint32_t fec_perf_int_t;
+#elif defined(_FEC_USE_SSE2)
+typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
+#elif defined(_FEC_USE_64BIT)
+typedef uint64_t fec_perf_int_t[4];
+#elif defined(_FEC_USE_MMX)
+typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
+#elif defined(_FEC_USE_32BIT)
+typedef uint32_t fec_perf_int_t[8];
+#else
+typedef uint16_t fec_perf_int_t;
+#endif
+
 typedef struct {
     fec_idx_t n;
     size_t pak_len;
 
     const unaligend_fec_int_t** paks; // size = n
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
+    fec_perf_int_t* tmp_pak;
+#endif
 } fec_tx_state_t;
 
 //#define FEC_USER_GIVEN_BUFFER
+
+// typedef uint16_t __attribute__ ((vector_size (32))) fec_2int_t;
+// typedef uint32_t fec_2int_t;
+// typedef uint16_t fec_2int_t;
 
 typedef struct {
     fec_idx_t n;
@@ -81,7 +133,7 @@ typedef struct {
 
 #ifdef FEC_MIN_MEM
     // min mem uses this:
-    fec_int_t *tmp_recovered_ints; // size = k
+    fec_perf_int_t *tmp_recovered_ints; // size = k
 #else
     // regular uses this:
     fec_int_t *pi_xy_div_xx; // size = k - 1
