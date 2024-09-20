@@ -14,15 +14,36 @@ DEBUG_CFLAGS += -g
 
 OPT_CFLAGS += -ffunction-sections -fdata-sections -O3 -fvisibility=hidden
 OPT_CFLAGS += -falign-loops=32 -mbranches-within-32B-boundaries
-OPT_CFLAGS += -mtune=skylake
-OPT_CFLAGS += -mpclmul
-OPT_CFLAGS +=  -mavx2 #-mno-sse2 -mno-sse3 -mno-sse4 -mno-sse4.1 -mno-sse4.2 -mno-avx2 -mno-avx -mno-sse -mno-mmx
-# OPT_CFLAGS += -mavx2
-# OPT_CFLAGS += -mavx
-# OPT_CFLAGS += -m32 -mno-sse2 -mno-sse3 -mno-sse4 -mno-sse4.1 -mno-sse4.2 -mno-avx2 -mno-avx -mno-sse -mno-mmx
-# OPT_CFLAGS += -march=armv8-a+crypto
-# OPT_CFLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
+OPT_CFLAGS += -march=skylake
 OPT_LDFLAGS = -Wl,--gc-sections
+
+# 32bit:
+OPT_CFLAGS += -m32
+
+# pclmul:
+# OPT_CFLAGS += -mpclmul
+# avx2:
+OPT_CFLAGS += -mno-pclmul -mavx2
+# avx:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mavx
+# sse2:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -msse2
+# sse:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse
+# mmx:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx
+# 64bit:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx
+# 32bit:
+# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx -m32
+
+# aarch64 clmul:
+# OPT_CFLAGS += -march=armv8-a+crypto
+
+# arm clmul:
+# OPT_CFLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
+
+
 
 #CROSS_FLAGS += -static
 #VALGRIND = valgrind -s --show-leak-kinds=all --partial-loads-ok=no --expensive-definedness-checks=yes

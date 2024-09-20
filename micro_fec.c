@@ -174,209 +174,86 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #define _FEC_ALIGN_SIZE_VAL 4
 #endif
 
-static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
-#if defined(__PCLMUL__) && defined(__SSE2__)
-    // uint32_t res;
-
-    // asm(
-    //     "movd %k[_a], %%xmm0\n"
-    //     "movd %k[_b], %%xmm1\n"
-    //     "movd %k[_poly], %%xmm2\n"
-    //     "PCLMULLQLQDQ %%xmm1, %%xmm0\n"
-    //     "movq %%xmm0, %%xmm1\n"
-    //     "PSRLD $%c[_shift], %%xmm1\n"
-    //     "PCLMULLQLQDQ %%xmm2, %%xmm1\n"
-    //     "XORPS %%xmm1, %%xmm0\n"
-    //     "PSRLD $%c[_shift], %%xmm1\n"
-    //     "PCLMULLQLQDQ %%xmm2, %%xmm1\n"
-    //     "XORPS %%xmm1, %%xmm0\n"
-    //     "movd %%xmm0, %k[_out]\n"
-    // : [_out] "=r" (res)
-    // : [_a] "r" ((uint32_t)a), [_b] "r" ((uint32_t)b), [_poly] "r" ((uint32_t)POLY_G), [_shift] "i" (sizeof(fec_int_t)*8)
-    // : "%xmm0", "%xmm1", "%xmm2"
-    // );
-    // return (fec_int_t)res;
-
-
-    // v128 _a;
-    // _a.u64[0] = a;
-    // v128 _b;
-    // _b.u64[0] = b;
-    // v128 _poly;
-    // _poly.u64[0] = POLY_G;
-
-    // v128 _c;
-    // _c.mm = _mm_clmulepi64_si128(_a.mm, _b.mm, 0);
-    // v128 _d;
-    // _d.u32 = (_c.u32 >> 16);
-    // _d.mm = _mm_clmulepi64_si128(_d.mm, _poly.mm, 0);
-    // _c.u16 ^= _d.u16;
-    // _d.u32 = _d.u32 >> 16;
-    // _d.mm = _mm_clmulepi64_si128(_d.mm, _poly.mm, 0);
-    // _c.u16 ^= _d.u16;
-    // return _c.u16[0];
-
-    u64x2 _a;
-    _a[0] = a;
-    u64x2 _b;
-    _b[0] = b;
-    // u64x2 _poly;
-    // _poly[0] = POLY_G;
-
-    u16x8 _c;
-    _c = (u16x8)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
-    // u32x4 _d;
-    // _d = (((u32x4)_c) >> 16);
-    // _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-    // _c ^= (u16x8)_d;
-    // _d >>= 16;
-    // _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-    // _c ^= (u16x8)_d;
-
-    uint32_t sum = ((u32x4)_c)[0];
-    uint16_t res = sum;
-    uint32_t carry = sum >> 16;
-
-    carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    res ^= carry;
-
-    carry = carry >> 16;
-    
-    res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    return res;
-    
-    //return _c[0];
-
-#elif defined(__ARM_FEATURE_AES)
-    // TODO: FEAT_PMULL is needed in processor
-#ifdef __aarch64__
+#if (defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__) && defined(__SSE2__)
+#define _poly_t u32x4
+#define _POLY_INT_TO_POLY(val) ((_poly_t){(val), 0, 0, 0})
+#define _POLY_TO_FEC_INT(poly_val) (((u16x8)(poly_val))[0])
+#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)_mm_clmulepi64_si128((__m128i)(poly1), (__m128i)(poly2), 0))
+#define _POLY_TWO_INT_TO_POLY(val1, val2) ((_poly_t){(val1), (val2), 0, 0})
+#define _POLY_GET_LOWER_32(poly_val) ((poly_val)[0])
+#define _POLY_GET_UPPER_32(poly_val) ((poly_val)[1])
+#define _POLY_GET_LOWER_FEC_INT(poly_val) (((u16x8)(poly_val))[0])
+#define _POLY_GET_UPPER_FEC_INT(poly_val) (((u16x8)(poly_val))[2])
+#define _POLY_TWO_SHIFT_RIGHT(poly_val, shift) ((poly_val) >> shift)
+#elif (defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)
+// TODO: FEAT_PMULL is needed in processor
 #define _poly_t poly64_t
-#else
+#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)vmull_p64((poly1), (poly2)))
+#elif defined(__sparc__) && defined(__VIS) && __VIS >= 0x300
+#define _poly_t uint64_t
+#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_vis_xmulx((int64_t)(poly1), (int64_t)(poly2)))
+#elif defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc))
+#if __riscv_xlen == 64
+#define _poly_t uint64_t
+#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_64((poly1), (poly2)))
+#elif __riscv_xlen == 32
 #define _poly_t uint32_t
+#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_32((poly1), (poly2)))
 #endif
+#endif
+
+#ifdef FEC_HAS_CLMUL32
+#ifndef _POLY_INT_TO_POLY
+#define _POLY_INT_TO_POLY(val) ((_poly_t)(val))
+#endif
+#ifndef _POLY_TO_FEC_INT
+#define _POLY_TO_FEC_INT(poly_val) ((fec_int_t)(poly_val))
+#endif
+#endif
+
+#ifdef FEC_HAS_CLMUL64
+#ifndef _POLY_TWO_INT_TO_POLY
+#define _POLY_TWO_INT_TO_POLY(val1, val2) ((_poly_t)((val1) |  (((_poly_t)(val2)) << 32)))
+#endif
+#ifndef _POLY_GET_LOWER_32
+#define _POLY_GET_LOWER_32(poly_val) ((uint32_t)(poly_val))
+#endif
+#ifndef _POLY_GET_UPPER_32
+#define _POLY_GET_UPPER_32(poly_val) ((uint32_t)((poly_val) >> 32))
+#endif
+#ifndef _POLY_GET_LOWER_FEC_INT
+#define _POLY_GET_LOWER_FEC_INT(poly_val) ((fec_int_t)(poly_val))
+#endif
+#ifndef _POLY_GET_UPPER_FEC_INT
+#define _POLY_GET_UPPER_FEC_INT(poly_val) ((fec_int_t)((poly_val) >> 32))
+#endif
+#ifndef _POLY_TWO_SHIFT_RIGHT
+#define _POLY_TWO_SHIFT_RIGHT(poly_val, shift) (((poly_val) >> (shift)) & (~((1ULL << 32) - (1ULL (32 - (shift))))))
+#endif
+#endif
+
+
+static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
+#if defined(FEC_HAS_CLMUL32)
+
+    _poly_t _a = _POLY_INT_TO_POLY(a);
+    _poly_t _b = _POLY_INT_TO_POLY(b);
+    _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+
     _poly_t _c;
-    _c = (_poly_t)vmull_p64(a, b);
+    _c = _POLY_SINGLE_MUL(_a, _b);
     _poly_t _d;
-    _d = (_c >> 16);
-    _d = (_poly_t)vmull_p64(_d, POLY_G);
+    _d = _c >> 16;
+    _d = _POLY_SINGLE_MUL(_d, _poly);
     _c ^= _d;
     _d >>= 16;
-    _d = (_poly_t)vmull_p64(_d, POLY_G);
+    _d = _POLY_SINGLE_MUL(_d, _poly);
     _c ^= _d;
-    return (fec_int_t)_c;
-#undef _poly_t
+    
+    return _POLY_TO_FEC_INT(_c);
 #else
-    size_t i = 0, j;
+    size_t i;
     fec_int_t res = 0;
-
-    uint32_t arr[16];
-    // uint32_t a_int = a;
-    // a_int <<= 15;
-
-    // while (b != 0) {
-    //     arr[i] = a & (((int16_t)b) >> 15);
-    //     a >>= 1;
-    //     b <<= 1;
-    //     i++;
-    // }
-
-    // for (j = 1; j <= 4; j++) {
-    //     for (i = 0; i < 16; i+=(1<<j)) {
-    //         arr[i] ^= arr[i+(1<<(j-1))];
-    //     }
-    // }
-
-    // for(i = 0; i < 16; i++) {
-    //     res ^= (((uint32_t)a)<<i) ^ (-((((uint32_t)b)>>i) & 1));
-    // }
-
-
-
-    // u32x8 aa1 = {a,a,a,a,a,a,a,a};
-    // u32x8 aa2 = {a,a,a,a,a,a,a,a};
-    // u32x8 bb1 = {b,b,b,b,b,b,b,b};
-    // u32x8 bb2 = {b,b,b,b,b,b,b,b};
-    // u32x8 cc1 = {0,1,2,3,4,5,6,7};
-    // u32x8 cc2 = {8,9,10,11,12,13,14,15};
-    // aa1 <<= cc1;
-    // aa2 <<= cc2;
-    // bb1 = -((bb1 >> cc1) & 1);
-    // bb2 = -((bb2 >> cc2) & 1);
-
-    // aa1 &= bb1;
-    // aa2 &= bb2;
-
-    // aa1 ^= aa2;
-    
-    // uint32_t sum = 0;
-    // for(i = 0; i < 8; i++) {
-    //     sum ^= aa1[i];
-    // }
-
-    // res = sum;
-    // uint32_t carry = sum >> 16;
-
-    // carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    // res ^= carry;
-
-    // carry = carry >> 16;
-    
-    // res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-
-    // arr[15] = ((uint32_t)a<<15) & (-((((uint32_t)b)>>15) & 1));
-    // arr[14] = ((uint32_t)a<<14) & (-((((uint32_t)b)>>14) & 1));
-    // arr[13] = ((uint32_t)a<<13) & (-((((uint32_t)b)>>13) & 1));
-    // arr[12] = ((uint32_t)a<<12) & (-((((uint32_t)b)>>12) & 1));
-    // arr[11] = ((uint32_t)a<<11) & (-((((uint32_t)b)>>11) & 1));
-    // arr[10] = ((uint32_t)a<<10) & (-((((uint32_t)b)>>10) & 1));
-    // arr[9] = ((uint32_t)a<<9) & (-((((uint32_t)b)>>9) & 1));
-    // arr[8] = ((uint32_t)a<<8) & (-((((uint32_t)b)>>8) & 1));
-    // arr[7] = ((uint32_t)a<<7) & (-((((uint32_t)b)>>7) & 1));
-    // arr[6] = ((uint32_t)a<<6) & (-((((uint32_t)b)>>6) & 1));
-    // arr[5] = ((uint32_t)a<<5) & (-((((uint32_t)b)>>5) & 1));
-    // arr[4] = ((uint32_t)a<<4) & (-((((uint32_t)b)>>4) & 1));
-    // arr[3] = ((uint32_t)a<<3) & (-((((uint32_t)b)>>3) & 1));
-    // arr[2] = ((uint32_t)a<<2) & (-((((uint32_t)b)>>2) & 1));
-    // arr[1] = ((uint32_t)a<<1) & (-((((uint32_t)b)>>1) & 1));
-    // arr[0] = ((uint32_t)a<<0) & (-((((uint32_t)b)>>0) & 1));
-
-    // arr[0*2] ^= arr[0*2+1];
-    // arr[1*2] ^= arr[1*2+1];
-    // arr[2*2] ^= arr[2*2+1];
-    // arr[3*2] ^= arr[3*2+1];
-    // arr[4*2] ^= arr[4*2+1];
-    // arr[5*2] ^= arr[5*2+1];
-    // arr[6*2] ^= arr[6*2+1];
-    // arr[7*2] ^= arr[7*2+1];
-
-    // arr[0*4] ^= arr[0*4+2];
-    // arr[1*4] ^= arr[1*4+2];
-    // arr[2*4] ^= arr[2*4+2];
-    // arr[3*4] ^= arr[3*4+2];
-
-    // arr[0*8] ^= arr[0*8+4];
-    // arr[1*8] ^= arr[1*8+4];
-
-    // arr[0*16] ^= arr[0*16+8];
-
-    // res = arr[0];
-    // uint32_t carry = arr[0] >> 16;
-
-    // carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    // res ^= carry;
-
-    // carry = carry >> 16;
-    
-    // res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    // //res ^= crc32Table[(res >> 16) & 0xFF] ^ crc32Table[(res >> 24) & 0xFF];
-
-    // return res;
 
     for (i = 0; i < sizeof(fec_int_t)*8; i++) {
         res = poly_add((res << 1), POLY_G & (-(res >> (sizeof(fec_int_t)*8 - 1)))); // poly left shift 1
@@ -613,7 +490,7 @@ fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len) 
     }
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    tx_state->tmp_pak = malloc(pak_len * sizeof(tx_state->tmp_pak[0]));
+    tx_state->tmp_pak = malloc(pak_len * sizeof(tx_state->tmp_pak[0]) + 32);
     if (tx_state->tmp_pak == NULL) {
         fec_tx_destroy(tx_state);
         return FEC_STATUS_OUT_OF_MEMORY;
@@ -688,7 +565,7 @@ fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, siz
     MALLOC_ATTR(missing_y, MIN(k, n));
 
 #ifdef FEC_MIN_MEM
-    MALLOC_ATTR(tmp_recovered_ints, ALIGN_UP(MIN(k, n), _FEC_ALIGN_SIZE_VAL/sizeof(fec_int_t)) + 20);
+    MALLOC_ATTR(tmp_recovered_ints, ALIGN_UP(MIN(k, n), _FEC_ALIGN_SIZE_VAL/sizeof(fec_int_t)) + 32);
 #else
     MALLOC_ATTR(pi_xy_div_xx, MIN(k - 1, n));
     MALLOC_ATTR(pi_yx_div_yy, MIN(k, n));
@@ -910,7 +787,7 @@ fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) 
 
 #endif
 
-#ifdef _FEC_USE_CLMUL
+#if defined(FEC_HAS_CLMUL64)
 void fec_tx_init_perf_arr(uint32_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
@@ -918,54 +795,54 @@ void fec_tx_init_perf_arr(uint32_t* restrict out_pak, size_t pak_len) {
 void PERF_DEBUG_ATTRS fec_tx_col_op(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     size_t j;
 
-    u32x4 _a = {a, 0, 0, 0};
+    _poly_t _a = _POLY_INT_TO_POLY(a);
 
     for (j = 0; j < pak_len - 1; j += 2) {
-        u32x4 _b = {pak[j], pak[j+1], 0, 0};
+        _poly_t _b = _POLY_TWO_INT_TO_POLY(pak[j], pak[j+1]);
 
-        u32x4 _c = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
 
-        out_pak[j] ^= _c[0];
-        out_pak[j+1] ^= _c[1];
+        out_pak[j] ^= _POLY_GET_LOWER_32(_c);
+        out_pak[j+1] ^= _POLY_GET_UPPER_32(_c);
     }
     
     if (j == pak_len - 1) {
-        u32x4 _b = {pak[j], 0, 0, 0};
+        _poly_t _b = _POLY_INT_TO_POLY(pak[j]);
 
-        u32x4 _c = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
 
-        out_pak[j] ^= _c[0];
+        out_pak[j] ^= _POLY_GET_LOWER_32(_c);
     }
 }
 
 void fec_tx_col_perf_to_norm(unaligend_fec_int_t* restrict out_pak, const uint32_t* restrict perf_pak, size_t pak_len) {
     size_t j;
-    u64x2 _poly = {POLY_G, 0};
+    _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
 
     for (j = 0; j < pak_len - 1; j += 2) {
 
-        u32x4 _c = {perf_pak[j], perf_pak[j+1]};
-        u32x4 _d = _c >> 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+        _poly_t _c = _POLY_TWO_INT_TO_POLY(perf_pak[j], perf_pak[j+1]);
+        _poly_t _d = _POLY_TWO_SHIFT_RIGHT(_c, 16);
+        _d = _POLY_SINGLE_MUL(_d, _poly);
         _c ^= _d;
-        _d >>= 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+        _d = _POLY_TWO_SHIFT_RIGHT(_d, 16);
+        _d = _POLY_SINGLE_MUL(_d, _poly);
         _c ^= _d;
         
-        out_pak[j] = ((u16x8)_c)[0];
-        out_pak[j+1] = ((u16x8)_c)[2];
+        out_pak[j] = _POLY_GET_LOWER_FEC_INT(_c);
+        out_pak[j+1] = _POLY_GET_UPPER_FEC_INT(_c);
     }
 
     if (j == pak_len - 1) {
-        u32x4 _c = {perf_pak[j]};
-        u32x4 _d = _c >> 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+        _poly_t _c = _POLY_INT_TO_POLY(perf_pak[j]);
+        _poly_t _d = _c >> 16;
+        _d = _POLY_SINGLE_MUL(_d, _poly);
         _c ^= _d;
         _d >>= 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
+        _d = _POLY_SINGLE_MUL(_d, _poly);
         _c ^= _d;
         
-        out_pak[j] = ((u16x8)_c)[0];
+        out_pak[j] = _POLY_TO_FEC_INT(_c);
     }
 }
 #endif
@@ -978,11 +855,19 @@ void fec_tx_col_perf_to_norm(unaligend_fec_int_t* restrict out_pak, const uint32
 #define my_mm256_extracti128_si256(x, y) ((u64x2){((u64x4)x)[y*2+0], ((u64x4)x)[y*2+1]})
 #endif
 
-#ifdef _FEC_USE_SSE2
+#if defined(__SSE2__)
+#define my_mm_shuffle_epi32(x, a, b, c, d) _mm_shuffle_epi32(x, _MM_SHUFFLE(d, c, b, a))
+#elif defined(__SSE__)
+#define my_mm_shuffle_epi32(x, a, b, c, d) ((u32x4)_mm_shuffle_ps(x, x, _MM_SHUFFLE(d, c, b, a)))
+#else
+#define my_mm_shuffle_epi32(x, a, b, c, d) ((u32x4){((u32x4)x)[a], ((u32x4)x)[b], ((u32x4)x)[c], ((u32x4)x)[d]})
+#endif
+
 void fec_tx_init_perf_arr_avx(u16x16* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
 
+#if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
 void PERF_DEBUG_ATTRS fec_tx_col_op_avx(u16x16* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     fec_idx_t i;
 
@@ -995,7 +880,9 @@ void PERF_DEBUG_ATTRS fec_tx_col_op_avx(u16x16* restrict out_pak, const unaligen
         out_pak[i] ^= _c;
     }
 }
+#endif
 
+#if defined(FEC_HAS_128_INT_VEC)
 void fec_tx_col_perf_to_norm_avx(unaligend_fec_int_t* restrict out_pak, const u16x16* restrict perf_pak, size_t pak_len) {
     fec_idx_t i;
 
@@ -1009,27 +896,27 @@ void fec_tx_col_perf_to_norm_avx(unaligend_fec_int_t* restrict out_pak, const u1
 
         u32x8 res3 = res1 ^ res2;
         u32x4 res4 = (u32x4)(my_mm256_extracti128_si256((__m256i)res3, 0) ^ my_mm256_extracti128_si256((__m256i)res3, 1));
-        u32x4 res5 = res4 ^ _mm_shuffle_epi32(res4, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res6 = res5 ^ _mm_shuffle_epi32(res5, _MM_SHUFFLE(1,0,3,2)); // res6 holds in each cell the int32 res
+        u32x4 res5 = res4 ^ my_mm_shuffle_epi32(res4, 1, 2, 3, 0);
+        u32x4 res6 = res5 ^ my_mm_shuffle_epi32(res5, 2, 3, 0, 1); // res6 holds in each cell the int32 res
 
         u32x4 res7 = (res6 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
         
-        u32x4 res8 = res7 ^ _mm_shuffle_epi32(res7, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res9 = res8 ^ _mm_shuffle_epi32(res8, _MM_SHUFFLE(1,0,3,2));
+        u32x4 res8 = res7 ^ my_mm_shuffle_epi32(res7, 1, 2, 3, 0);
+        u32x4 res9 = res8 ^ my_mm_shuffle_epi32(res8, 2, 3, 0, 1);
 
         u32x4 res10 = (res9 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
         
-        u32x4 res11 = res10 ^ _mm_shuffle_epi32(res10, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res12 = res11 ^ _mm_shuffle_epi32(res11, _MM_SHUFFLE(1,0,3,2));
+        u32x4 res11 = res10 ^ my_mm_shuffle_epi32(res10, 1, 2, 3, 0);
+        u32x4 res12 = res11 ^ my_mm_shuffle_epi32(res11, 2, 3, 0, 1);
 
         out_pak[i] = ((u16x8)(res6 ^ res9 ^ res12))[0];
 
     }
 }
-
 #endif
 
-#ifdef _FEC_USE_MMX
+
+#ifdef FEC_HAS_64_INT_VEC
 
 void fec_tx_init_perf_arr_mmx(__m64* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0])*4);
@@ -1044,17 +931,159 @@ void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) __attribute__((used
     
     #pragma GCC unroll 4
     for (j = 0; j < 4; j++) {
-        _a[j] = _mm_srai_pi16(_mm_sll_pi16(__a, (__m64)(u16x4){j*4 + 3, j*4 + 2, j*4 + 1, j*4 + 0}), 15);
+        _a[j] = _mm_srai_pi16(_mm_mullo_pi16(__a, (__m64)(u16x4){1 << (15 - (j*4 + 0)), 1 << (15 - (j*4 + 1)), 1 << (15 - (j*4 + 2)), 1 << (15 - (j*4 + 3))}), 15);
+        //_a[j] = _mm_cmpgt_pi16((__m64){0}, _mm_mullo_pi16(__a, (__m64)(u16x4){1 << (15 - (j*4 + 0)), 1 << (15 - (j*4 + 1)), 1 << (15 - (j*4 + 2)), 1 << (15 - (j*4 + 3))}));
     }
 
     for (i = 0; i < pak_len; i++) {
         __m64 pak_val = _mm_set1_pi16(pak[i]);
         #pragma GCC unroll 4
         for (j = 0; j < 4; j++) {
-            out_pak[i*4 + j] = _mm_xor_si64(out_pak[i*4 + j], _mm_and_si64(_a[j], pak_val));
+
+            // out_pak[i*4 + j] = _mm_xor_si64(out_pak[i*4 + j], _mm_and_si64(_a[j], pak_val));
+
+            __m64 res = _mm_and_si64(_a[j], pak_val);
+
+            asm inline(
+                "pxor %0, %1;"
+                "movq %1, %0;"
+            : "+m"(out_pak[i*4 + j]), "+y"(res)
+            : 
+            : );
         }
     }
 }
+
+#if (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
+void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_tx_col_op_sse(__m128* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
+    fec_idx_t i;
+
+    // u16x16 shifts = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+
+    // u16x16 _a2 = (u16x16)(((i16x16)(a << shifts)) >> 15);
+
+    int j;
+    //__m64 _a_mmx[4] __attribute__((aligned(16)));
+    union {
+        __m64 mmx[4];
+        __m128 sse[2];
+    } _a_tmp;
+    const __m64 __a = _mm_set1_pi16(a);
+    
+    #pragma GCC unroll 4
+    for (j = 0; j < 4; j++) {
+        __m64 res = _mm_srai_pi16(_mm_mullo_pi16(__a, (__m64)(u16x4){1 << (15 - (j*4 + 0)), 1 << (15 - (j*4 + 1)), 1 << (15 - (j*4 + 2)), 1 << (15 - (j*4 + 3))}), 15);
+        asm inline(
+                "movq %1, %0;"
+            : "=m"(_a_tmp.mmx[j])
+            : "y"(res)
+            : );
+    }
+
+     __m128 _a_low;
+     __m128 _a_high;
+
+    asm inline(
+                "movaps %1, %0;"
+            : "=x"(_a_low)
+            : "m"(_a_tmp.sse[0])
+            : );
+    
+    asm inline(
+                "movaps %1, %0;"
+            : "=x"(_a_high)
+            : "m"(_a_tmp.sse[1])
+            : );
+    
+
+    // i16x8 _sel = {0, 0, -1, 0, 0, -1, -1, -1};
+    
+    // ux16x8 _a_low = _mm_shuffle_ps(_sel, _sel, (uint8_t)a);
+
+    for (i = 0; i < pak_len; i++) {
+
+        // u16x16 _c = _a2 & pak[i];
+        //out_pak[i] ^= _c;
+
+        uint16_t pak_val = pak[i];
+        // union {
+        //     uint32_t u;
+        //     float f;
+        // } pak_val_2 = {.u = (pak_val | (((uint32_t)pak_val) << 16))};
+
+        uint32_t pak_val_2 =  (pak_val | (((uint32_t)pak_val) << 16));
+        //register __m128 pak_val_8 = _mm_set1_ps(pak_val_2.f);
+        __m128 pak_val_8;
+
+        __m128 res;
+
+        asm inline(
+                "movss %[pak_val_2], %[pak_val_8];"
+                "shufps $0, %[pak_val_8], %[pak_val_8];"
+            : [pak_val_8] "=x"(pak_val_8)
+            : [pak_val_2] "m"(pak_val_2)
+            : );
+        
+        // volatile __m128 aaa;
+        // aaa = res;
+
+        // if (memcmp(&_a_low, (void*)&aaa, sizeof(aaa)) != 0) {
+        //     printf("asdfasfdsf\n");
+        //     printf("%llx\n", (uint64_t)__a);
+        //     printf("%04x\n", a);
+        //     for(j = 0; j < 8; j++) {
+        //         printf("%04x %04x\n", ((u16x8)aaa)[j], ((u16x8)_a_low)[j]);
+        //     }
+        //     exit(1);
+        // }
+
+
+// #define my_mm_loada_128()
+//         asm inline(
+//             "movaps %1, %0;"
+//         : "+m"(out_pak[i*4 + j]), "+y"(res)
+//         : 
+//         : );
+
+        //__m128 res = _mm_and_ps(_a_low, pak_val_8);
+
+        res = pak_val_8;
+
+        asm inline(
+                "andps %[_a_low], %[res];"
+            : [res] "+x"(res)
+            : [_a_low] "x"(_a_low)
+            : );
+
+        asm inline(
+                "xorps %0, %1;"
+                "movaps %1, %0;"
+            : "+m"(out_pak[2*i]), "+x"(res)
+            : 
+            : );
+        
+        // res = _mm_and_ps(_a_high, pak_val_8);
+
+        res = pak_val_8;
+
+        asm inline(
+                "andps %[_a_high], %[res];"
+            : [res] "+x"(res)
+            : [_a_high] "x"(_a_high)
+            : );
+
+        asm inline(
+                "xorps %0, %1;"
+                "movaps %1, %0;"
+            : "+m"(out_pak[2*i + 1]), "+x"(res)
+            : 
+            : );
+
+        // out_pak[2*i] = _mm_xor_ps(out_pak[2*i], _mm_and_ps(_a_low, pak_val_8));
+        // out_pak[2*i + 1] = _mm_xor_ps(out_pak[2*i + 1], _mm_and_ps(_a_high, pak_val_8));
+    }
+}
+#endif
 
 void fec_tx_col_perf_to_norm_mmx(unaligend_fec_int_t* restrict out_pak, const uint16_t* restrict perf_pak, size_t pak_len) {
     fec_idx_t i;
@@ -1083,7 +1112,7 @@ void fec_tx_col_perf_to_norm_mmx(unaligend_fec_int_t* restrict out_pak, const ui
 
 #endif
 
-#ifdef _FEC_USE_64BIT
+#ifdef FEC_HAS_64BIT
 
 void fec_tx_init_perf_arr_reg(uint64_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0])*4);
@@ -1142,13 +1171,13 @@ void fec_tx_col_perf_to_norm_reg(unaligend_fec_int_t* restrict out_pak, const ui
 #endif
 
 
-#ifdef _FEC_USE_32BIT
+#ifdef FEC_HAS_32BIT
 
-void fec_tx_init_perf_arr_reg(uint32_t* restrict out_pak, size_t pak_len) {
+void fec_tx_init_perf_arr_reg32(uint32_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0])*8);
 }
 
-void PERF_DEBUG_ATTRS fec_tx_col_op_reg(uint64_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
+void PERF_DEBUG_ATTRS fec_tx_col_op_reg32(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
 
     int j;
     uint32_t _a[8];
@@ -1170,7 +1199,7 @@ void PERF_DEBUG_ATTRS fec_tx_col_op_reg(uint64_t* restrict out_pak, const unalig
     }
 }
 
-void fec_tx_col_perf_to_norm_reg(unaligend_fec_int_t* restrict out_pak, const uint16_t* restrict perf_pak, size_t pak_len) {
+void fec_tx_col_perf_to_norm_reg32(unaligend_fec_int_t* restrict out_pak, const uint16_t* restrict perf_pak, size_t pak_len) {
     fec_idx_t i;
     int j;
     for (i = 0; i < pak_len; i++) {
@@ -1209,6 +1238,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
     fec_perf_int_t* restrict tmp_pak = tx_state->tmp_pak;
+    tmp_pak = (fec_perf_int_t*)(((uintptr_t)tmp_pak + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
     const fec_int_t* restrict inv_arr = inv_cache->inv_arr - 1;
 #endif
 
@@ -1264,7 +1294,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //     out_pak[j] = rand();
     // }
 
-#if defined(_FEC_USE_CLMUL)
+#if defined(FEC_HAS_CLMUL64)
 
     // seems to be bound by L3 cache size for performance
 
@@ -1294,9 +1324,32 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //     }
     //     fec_tx_col_perf_to_norm(&out_pak[k], tmp_pak, cur_pak_len);
     // }
-#elif defined(_FEC_USE_SSE2)
+#elif defined(FEC_HAS_128_INT_VEC) || defined(FEC_HAS_64_INT_VEC)
     size_t k;
     fec_idx_t m;
+
+    fec_tx_init_perf_arr_avx(tmp_pak, pak_len);
+    for (i = 0; i < n; i++) {
+        fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
+        const unaligend_fec_int_t* pak = paks[i];
+#if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
+        fec_tx_col_op_avx(tmp_pak, pak, pak_len, a_i);
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
+        fec_tx_col_op_sse((__m128*)tmp_pak, pak, pak_len, a_i);
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
+        fec_tx_col_op_mmx((__m64*)tmp_pak, pak, pak_len, a_i);
+#endif
+    }
+
+#if defined(FEC_HAS_128_INT_VEC)
+    fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
+#else
+    fec_tx_col_perf_to_norm_mmx(out_pak, (const uint16_t*)tmp_pak, pak_len);
+#endif
+    
+#if !defined(FEC_HAS_128_INT_VEC) && defined(FEC_HAS_64_INT_VEC) && (defined(__x86_64__) || defined(__i386__))
+    _mm_empty();
+#endif
 
     // // seems to be bound by L2 cache size for performance
     
@@ -1320,45 +1373,45 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //     fec_tx_col_perf_to_norm_avx(&out_pak[k], tmp_pak, cur_pak_len);
     // }
 
-#ifndef N_BLOCK
-    #define N_BLOCK 1
-#endif
-    #define LEN_BLOCK (32*1024 - 4*1024 - 8*N_BLOCK) / (64 + 2*N_BLOCK)
-    //#define LEN_BLOCK 1024
+// #ifndef N_BLOCK
+//     #define N_BLOCK 1
+// #endif
+//     #define LEN_BLOCK (32*1024 - 4*1024 - 8*N_BLOCK) / (64 + 2*N_BLOCK)
+//     //#define LEN_BLOCK 1024
 
-    fec_tx_init_perf_arr_avx(tmp_pak, pak_len);
+//     fec_tx_init_perf_arr_avx(tmp_pak, pak_len);
 
-    for(m = 0; m < n; m += N_BLOCK) {
-        fec_idx_t cur_n = MIN(n - m, N_BLOCK);
+//     for(m = 0; m < n; m += N_BLOCK) {
+//         fec_idx_t cur_n = MIN(n - m, N_BLOCK);
 
-        for (k = 0; k < pak_len; k += LEN_BLOCK) {
+//         for (k = 0; k < pak_len; k += LEN_BLOCK) {
 
-            // size_t ii;
-            // for (ii = 0; ii < LEN_BLOCK * sizeof(tmp_pak[0]); ii += 0x40) {
-            //     _mm_prefetch(((char*)&tmp_pak[k + LEN_BLOCK]) + ii, _MM_HINT_ET0);
-            // }
+//             // size_t ii;
+//             // for (ii = 0; ii < LEN_BLOCK * sizeof(tmp_pak[0]); ii += 0x40) {
+//             //     _mm_prefetch(((char*)&tmp_pak[k + LEN_BLOCK]) + ii, _MM_HINT_ET0);
+//             // }
             
-            size_t cur_pak_len = MIN(pak_len - k, LEN_BLOCK);
+//             size_t cur_pak_len = MIN(pak_len - k, LEN_BLOCK);
             
-            for (i = 0; i < cur_n; i++) {
-                fec_int_t a_i = inv_arr[poly_add(n + idx - 1, m + i)];
-                const unaligend_fec_int_t* pak = paks[m + i];
-                // for (j = 0; j < pak_len; j++) {
-                //     // if (idx == 0) {
-                //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-                //     // } else {
-                //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-                //     // }
-                // }
-                fec_tx_col_op_avx(&tmp_pak[k], &pak[k], cur_pak_len, a_i);
-            }
+//             for (i = 0; i < cur_n; i++) {
+//                 fec_int_t a_i = inv_arr[poly_add(n + idx - 1, m + i)];
+//                 const unaligend_fec_int_t* pak = paks[m + i];
+//                 // for (j = 0; j < pak_len; j++) {
+//                 //     // if (idx == 0) {
+//                 //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
+//                 //     // } else {
+//                 //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
+//                 //     // }
+//                 // }
+//                 fec_tx_col_op_avx(&tmp_pak[k], &pak[k], cur_pak_len, a_i);
+//             }
             
-        }
-    }
+//         }
+//     }
 
-    fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
+//     fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
 
-#elif defined(_FEC_USE_64BIT)
+#elif defined(FEC_HAS_64BIT)
     // fec_tx_init_perf_arr_reg((uint64_t*)tmp_pak, pak_len);
     // for (i = 0; i < n; i++) {
     //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
@@ -1389,28 +1442,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
         }
         fec_tx_col_perf_to_norm_reg(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
     }
-#elif defined(_FEC_USE_MMX)
-    // fec_tx_init_perf_arr_mmx((__m64*)tmp_pak, pak_len);
-    // for (i = 0; i < n; i++) {
-    //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
-    //     const unaligend_fec_int_t* pak = paks[i];
-    //     fec_tx_col_op_mmx((__m64*)tmp_pak, pak, pak_len, a_i);
-    // }
-    // fec_tx_col_perf_to_norm_mmx(out_pak, (const uint16_t*)tmp_pak, pak_len);
-
-    size_t k;
-    
-    for (k = 0; k < pak_len; k += 8*1024U) {
-        size_t cur_pak_len = MIN(pak_len - k, 8*1024U);
-        fec_tx_init_perf_arr_mmx((__m64*)tmp_pak, cur_pak_len);
-        for (i = 0; i < n; i++) {
-            fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-            const unaligend_fec_int_t* pak = paks[i];
-            fec_tx_col_op_mmx((__m64*)tmp_pak, &pak[k], cur_pak_len, a_i);
-        }
-        fec_tx_col_perf_to_norm_mmx(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
-    }
-#elif defined(_FEC_USE_32BIT)
+#elif defined(FEC_HAS_32BIT)
     // fec_tx_init_perf_arr_reg((uint32_t*)tmp_pak, pak_len);
     // for (i = 0; i < n; i++) {
     //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
@@ -1423,13 +1455,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     
     for (k = 0; k < pak_len; k += 8*1024U) {
         size_t cur_pak_len = MIN(pak_len - k, 8*1024U);
-        fec_tx_init_perf_arr_reg((uint32_t*)tmp_pak, cur_pak_len);
+        fec_tx_init_perf_arr_reg32((uint32_t*)tmp_pak, cur_pak_len);
         for (i = 0; i < n; i++) {
             fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
             const unaligend_fec_int_t* pak = paks[i];
-            fec_tx_col_op_reg((uint32_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
+            fec_tx_col_op_reg32((uint32_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
         }
-        fec_tx_col_perf_to_norm_reg(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
+        fec_tx_col_perf_to_norm_reg32(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
     }
 #else
     for (i = 0; i < n; i++) {
@@ -2165,11 +2197,12 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_perf_int_t* restrict recovered,
 }
 
 
+#ifdef FEC_HAS_CLMUL64
 static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     inv_arr = inv_arr - 1;
     fec_idx_t i;
 
-    u32x4 _b = {pak_val, 0, 0, 0};
+    _poly_t _b = _POLY_INT_TO_POLY(pak_val);
     
     for (i = 0; i < num_y_missing - 1; i+=2) {
         // uint32_t h = ((uint32_t*)missing_y)[i/2];
@@ -2178,21 +2211,22 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, con
         uint16_t a1 = inv_arr[poly_add(pak_xy, missing_y[i])];
         uint16_t a2 = inv_arr[poly_add(pak_xy, missing_y[i+1])];
 
-        u32x4 _a = {a1, a2, 0, 0};
+        _poly_t _a = _POLY_TWO_INT_TO_POLY(a1, a2);
 
-        u32x4 _c = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
+        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
         
-        recovered[i] ^= _c[0];
-        recovered[i+1] ^= _c[1];
+        recovered[i] ^= _POLY_GET_LOWER_32(_c);
+        recovered[i+1] ^= _POLY_GET_UPPER_32(_c);
     }
 
     if (i == num_y_missing - 1) {
         uint16_t a1 = inv_arr[poly_add(pak_xy, missing_y[i])];
-        u32x4 _a = {a1, 0, 0, 0};
-        u32x4 _c = (u32x4)_mm_clmulepi64_si128((__m128i)_a, (__m128i)_b, 0);
-        recovered[i] ^= _c[0];
+        _poly_t _a = _POLY_INT_TO_POLY(a1);
+        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
+        recovered[i] ^= _POLY_GET_LOWER_32(_c);
     }
 }
+#endif
 
 static void PERF_DEBUG_ATTRS __fec_rx_col_op_5(u16x16* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     inv_arr = inv_arr - 1;
@@ -2209,6 +2243,41 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op_5(u16x16* restrict recovered, const
         recovered[i] ^= _c;
     }
 }
+
+#ifdef FEC_HAS_64_INT_VEC
+void PERF_DEBUG_ATTRS fec_rx_col_op_mmx(__m64* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+    inv_arr = inv_arr - 1;
+
+    fec_idx_t i;
+
+    int j;
+    __m64 _pak_val[4];
+    const __m64 __pak_val = _mm_set1_pi16(pak_val);
+    
+    #pragma GCC unroll 4
+    for (j = 0; j < 4; j++) {
+        _pak_val[j] = _mm_srai_pi16(_mm_mullo_pi16(__pak_val, (__m64)(u16x4){1 << (15 - (j*4 + 0)), 1 << (15 - (j*4 + 1)), 1 << (15 - (j*4 + 2)), 1 << (15 - (j*4 + 3))}), 15);
+    }
+
+    for (i = 0; i < num_y_missing; i++) {
+        __m64 a = _mm_set1_pi16(inv_arr[poly_add(pak_xy, missing_y[i])]);
+        #pragma GCC unroll 4
+        for (j = 0; j < 4; j++) {
+
+            // recovered[i*4 + j] = _mm_xor_si64(recovered[i*4 + j], _mm_and_si64(_pak_val[j], a));
+
+            __m64 res = _mm_and_si64(_pak_val[j], a);
+
+            asm inline(
+                "pxor %0, %1;"
+                "movq %1, %0;"
+            : "+m"(recovered[i*4 + j]), "+y"(res)
+            : 
+            : );
+        }
+    }
+}
+#endif
 
 
 fec_int_t PERF_DEBUG_ATTRS __fec_rx_row_op(const unaligend_fec_int_t * const* pak_arr, fec_idx_t num, size_t ii, const fec_int_t* xy_arr, fec_int_t missing_y_i, const fec_int_t *inv_arr, fec_int_t ones_pak_ii) {
@@ -2989,8 +3058,9 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     start_time = get_timestamp();
 #endif
 
-    //fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + 0x1f) & ~0x1fULL);
-    fec_perf_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+    fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + 0x1f) & ~0x1fULL);
+    //fec_perf_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+    const fec_int_t* inv_arr = inv_cache->inv_arr;
 
     for (ii = 0; ii < pak_len; ii++) {
         
@@ -3015,38 +3085,143 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         // }
 
         // for (i = 0; i < num_y_missing; i++) {
-        //     tmp_recovered_ints[i] = ones_pak_ii; //(u16x16){ones_pak_ii, 0};
+        //     _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
+        // }
+
+#if defined(FEC_HAS_CLMUL64)
+        {
+            for (i = 0; i < num_y_missing; i++) {
+                tmp_recovered_ints[i] = ones_pak_ii;
+            }
+
+            for (j = 0; j < num_y_present + num_x_present; j++) {
+                fec_int_t xy_j = present_y[j];
+                fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+                __fec_rx_col_op_4(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+            }
+
+            _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+
+            for (i = 0; i < num_y_missing - 1; i += 2) {
+
+                _poly_t _c = _POLY_TWO_INT_TO_POLY(tmp_recovered_ints[i], tmp_recovered_ints[i+1]);
+                _poly_t _d = _POLY_TWO_SHIFT_RIGHT(_c, 16);
+                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _c ^= _d;
+                _d = _POLY_TWO_SHIFT_RIGHT(_d, 16);
+                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _c ^= _d;
+                
+                _GET_X_PAK(i)[ii] = _POLY_GET_LOWER_FEC_INT(_c);
+                _GET_X_PAK(i+1)[ii] = _POLY_GET_UPPER_FEC_INT(_c);
+            }
+            
+            if (i == num_y_missing - 1) {
+                _poly_t _c = _POLY_INT_TO_POLY(tmp_recovered_ints[i]);
+                _poly_t _d = _c >> 16;
+                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _c ^= _d;
+                _d >>= 16;
+                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _c ^= _d;
+
+                _GET_X_PAK(i)[ii] = _POLY_TO_FEC_INT(_c);
+            }
+        }
+#elif defined(FEC_HAS_128_INT_VEC) && 0
+        {
+            for (i = 0; i < num_y_missing; i++) {
+                tmp_recovered_ints[i] = (u16x16){ones_pak_ii, 0};
+            }
+
+            for (j = 0; j < num_y_present + num_x_present; j++) {
+                fec_int_t xy_j = present_y[j];
+                fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+                __fec_rx_col_op_5(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+            }
+
+            u32x8 shifts1 = {0, 2, 4, 6, 8, 10, 12, 14};
+            u32x8 shifts2 = {1, 3, 5, 7, 9, 11, 13, 15};
+
+            for (i = 0; i < num_y_missing; i++) {
+                u16x16 res = tmp_recovered_ints[i];
+                u32x8 res1 = (((u32x8)res) & 0xFFFF) << shifts1;
+                u32x8 res2 = (((u32x8)res) >> 16) << shifts2;
+
+                u32x8 res3 = res1 ^ res2;
+                u32x4 res4 = (u32x4)(my_mm256_extracti128_si256((__m256i)res3, 0) ^ my_mm256_extracti128_si256((__m256i)res3, 1));
+                u32x4 res5 = res4 ^ my_mm_shuffle_epi32(res4, 1, 2, 3, 0);
+                u32x4 res6 = res5 ^ my_mm_shuffle_epi32(res5, 2, 3, 0, 1); // res6 holds in each cell the int32 res
+
+                u32x4 res7 = (res6 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
+                
+                u32x4 res8 = res7 ^ my_mm_shuffle_epi32(res7, 1, 2, 3, 0);
+                u32x4 res9 = res8 ^ my_mm_shuffle_epi32(res8, 2, 3, 0, 1);
+
+                u32x4 res10 = (res9 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
+                
+                u32x4 res11 = res10 ^ my_mm_shuffle_epi32(res10, 1, 2, 3, 0);
+                u32x4 res12 = res11 ^ my_mm_shuffle_epi32(res11, 2, 3, 0, 1);
+
+                _GET_X_PAK(i)[ii] = ((u16x8)(res6 ^ res9 ^ res12))[0];
+
+            }
+        }
+#elif defined(FEC_HAS_64_INT_VEC)
+    {
+        for (i = 0; i < num_y_missing; i++) {
+            tmp_recovered_ints[i] = (u16x16){ones_pak_ii, 0};
+        }
+
+        for (j = 0; j < num_y_present + num_x_present; j++) {
+            fec_int_t xy_j = present_y[j];
+            fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+            fec_rx_col_op_mmx((__m64*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+        }
+
+        for (i = 0; i < num_y_missing; i++) {
+
+            uint32_t res = 0;
+            int jj;
+            for (jj = 0; jj < 16; jj++) {
+                res ^= ((uint32_t)(((uint16_t*)tmp_recovered_ints)[i*16 + jj])) << jj;
+            }
+
+            uint16_t res4 = res;
+            uint32_t carry = res >> 16;
+
+            carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+            res4 ^= carry;
+
+            carry = carry >> 16;
+            
+            res4 ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+            _GET_X_PAK(i)[ii] = res4;
+        }
+    }
+
+#else
+        // for (i = 0; i < num_y_missing; i++) {
+        //     tmp_recovered_ints[i] = ones_pak_ii;
         // }
 
         // for (j = 0; j < num_y_present + num_x_present; j++) {
         //     fec_int_t xy_j = present_y[j];
         //     fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
-        //     // for (i = 0; i < num_y_missing; i++) {
-        //     //     fec_int_t missing_y_i = missing_y[i];
-        //     //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
-        //     // }
-        //     __fec_rx_col_op(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_ii, xy_j);
+        //     for (i = 0; i < num_y_missing; i++) {
+        //         fec_int_t missing_y_i = missing_y[i];
+        //         tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+        //     }
         // }
-
-        // __fec_rx_one_op(num_y_present + num_x_present, present_y, y_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
-        //__fec_rx_one_op2(num_y_present + num_x_present, present_y, y_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
-        //__fec_rx_one_op3(num_y_present + num_x_present, present_y, y_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
-
-#ifndef _FEC_USE_64BIT
-#if defined(_FEC_USE_CLMUL)
-        __fec_rx_one_op4
-#elif defined(_FEC_USE_SSE2)
-        __fec_rx_one_op5
-#endif
-        (num_y_present + num_x_present, present_y, y_pak_arr, x_pak_arr, tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii, ones_pak_ii);
-#endif
-
         // for (i = 0; i < num_y_missing; i++) {
         //     _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
         // }
+#endif
     }
 
-#ifdef _FEC_USE_POLY_MUL4_MMX
+#if defined(_FEC_USE_POLY_MUL4_MMX) || defined(FEC_HAS_64_INT_VEC)
     _mm_empty();
 #endif
 
@@ -3162,138 +3337,6 @@ reorder_packets:
 
     return FEC_STATUS_SUCCESS;
 }
-
-#if defined(_FEC_USE_CLMUL)
-void PERF_DEBUG_ATTRS __fec_rx_one_op4(fec_idx_t num_xy, fec_int_t* restrict present_y, _PAK_ARR_PARAMS, uint32_t* restrict tmp_recovered_ints, fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* restrict inv_cache, size_t out_pak_idx, fec_int_t ones_pak_val) {
-    fec_idx_t i, j;
-
-    for (i = 0; i < num_y_missing; i++) {
-        tmp_recovered_ints[i] = ones_pak_val; //(u16x16){ones_pak_ii, 0};
-    }
-
-    for (j = 0; j < num_xy; j++) {
-        fec_int_t xy_j = present_y[j];
-        fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[out_pak_idx];
-        // for (i = 0; i < num_y_missing; i++) {
-        //     fec_int_t missing_y_i = missing_y[i];
-        //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
-        // }
-        __fec_rx_col_op_4(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_val, xy_j);
-    }
-
-    u64x2 _poly = {POLY_G, 0};
-
-    for (i = 0; i < num_y_missing - 1; i += 2) {
-
-        u32x4 _c = {tmp_recovered_ints[i], tmp_recovered_ints[i+1]};
-        u32x4 _d = _c >> 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-        _c ^= _d;
-        _d >>= 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-        _c ^= _d;
-        
-        // uint16_t res = tmp_recovered_ints[i];
-        // uint32_t carry = tmp_recovered_ints[i] >> 16;
-
-        // carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-        // res ^= carry;
-
-        // carry = carry >> 16;
-        
-        // res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
-        
-        _GET_X_PAK(i)[out_pak_idx] = ((u16x8)_c)[0];
-        _GET_X_PAK(i+1)[out_pak_idx] = ((u16x8)_c)[2];
-    }
-    
-    if (i == num_y_missing - 1) {
-        u32x4 _c = {tmp_recovered_ints[i]};
-        u32x4 _d = _c >> 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-        _c ^= _d;
-        _d >>= 16;
-        _d = (u32x4)_mm_clmulepi64_si128((__m128i)_d, (__m128i)_poly, 0);
-        _c ^= _d;
-
-        _GET_X_PAK(i)[out_pak_idx] = ((u16x8)_c)[0];
-    }
-}
-
-#elif defined(_FEC_USE_SSE2)
-
-void PERF_DEBUG_ATTRS __fec_rx_one_op5(fec_idx_t num_xy, fec_int_t* restrict present_y, _PAK_ARR_PARAMS, u16x16* restrict tmp_recovered_ints, fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* restrict inv_cache, size_t out_pak_idx, fec_int_t ones_pak_val) {
-    fec_idx_t i, j;
-
-    for (i = 0; i < num_y_missing; i++) {
-        tmp_recovered_ints[i] = (u16x16){ones_pak_val, 0};
-    }
-
-    for (j = 0; j < num_xy; j++) {
-        fec_int_t xy_j = present_y[j];
-        fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[out_pak_idx];
-        // for (i = 0; i < num_y_missing; i++) {
-        //     fec_int_t missing_y_i = missing_y[i];
-        //     tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
-        // }
-        __fec_rx_col_op_5(tmp_recovered_ints, missing_y, num_y_missing, inv_cache->inv_arr, xy_pak_arr_j_val, xy_j);
-    }
-
-    u32x8 shifts1 = {0, 2, 4, 6, 8, 10, 12, 14};
-    u32x8 shifts2 = {1, 3, 5, 7, 9, 11, 13, 15};
-    u64x2 _poly = {POLY_G, 0};
-
-    // for (i = 0; i < num_y_missing; i++) {
-    //     u16x16 res = tmp_recovered_ints[i];
-    //     u32x8 res1 = (((u32x8)res) & 0xFFFF) << shifts1;
-    //     u32x8 res2 = (((u32x8)res) >> 16) << shifts2;
-
-    //     uint32_t res1_x = res1[0] ^ res1[1] ^ res1[2] ^ res1[3] ^ res1[4] ^ res1[5] ^ res1[6] ^ res1[7];
-    //     uint32_t res2_x = res2[0] ^ res2[1] ^ res2[2] ^ res2[3] ^ res2[4] ^ res2[5] ^ res2[6] ^ res2[7];
-
-    //     uint32_t res3 = res1_x ^ res2_x;
-
-    //     uint16_t res4 = res3;
-    //     uint32_t carry = res3 >> 16;
-
-    //     carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
-
-    //     res4 ^= carry;
-
-    //     carry = carry >> 16;
-        
-    //     res4 ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
-        
-    //     _GET_X_PAK(i)[out_pak_idx] = res4;
-    // }
-
-    for (i = 0; i < num_y_missing; i++) {
-        u16x16 res = tmp_recovered_ints[i];
-        u32x8 res1 = (((u32x8)res) & 0xFFFF) << shifts1;
-        u32x8 res2 = (((u32x8)res) >> 16) << shifts2;
-
-        u32x8 res3 = res1 ^ res2;
-        u32x4 res4 = (u32x4)(my_mm256_extracti128_si256((__m256i)res3, 0) ^ my_mm256_extracti128_si256((__m256i)res3, 1));
-        u32x4 res5 = res4 ^ _mm_shuffle_epi32(res4, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res6 = res5 ^ _mm_shuffle_epi32(res5, _MM_SHUFFLE(1,0,3,2)); // res6 holds in each cell the int32 res
-
-        u32x4 res7 = (res6 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
-        
-        u32x4 res8 = res7 ^ _mm_shuffle_epi32(res7, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res9 = res8 ^ _mm_shuffle_epi32(res8, _MM_SHUFFLE(1,0,3,2));
-
-        u32x4 res10 = (res9 >> 16) << ((u32x4){0, 1, 3, 5}); // mul upper by POLY_G
-        
-        u32x4 res11 = res10 ^ _mm_shuffle_epi32(res10, _MM_SHUFFLE(0,3,2,1));
-        u32x4 res12 = res11 ^ _mm_shuffle_epi32(res11, _MM_SHUFFLE(1,0,3,2));
-
-        _GET_X_PAK(i)[out_pak_idx] = ((u16x8)(res6 ^ res9 ^ res12))[0];
-
-    }
-
-}
-#endif
 
 #endif
 

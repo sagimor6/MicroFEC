@@ -41,46 +41,76 @@ typedef struct {
 
 } fec_inv_cache_t;
 
-//#define FEC_OPT_TYPE_CLMUL
-#define FEC_OPT_TYPE_AVX
-//#define FEC_OPT_TYPE_REG
-
-#if defined(FEC_OPT_TYPE_CLMUL)
-typedef uint32_t fec_perf_int_t;
-#elif defined(FEC_OPT_TYPE_AVX)
-typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
-#elif defined(FEC_OPT_TYPE_REG)
-typedef uint64_t fec_perf_int_t[4];
-#endif
-
-
 
 #if !defined(_FEC_NO_OPT)
-#if (defined(__PCLMUL__) && defined(__SSE2__)) && 0
-#define _FEC_USE_CLMUL
-#elif defined(__SSE2__)
-#define _FEC_USE_SSE2 // xmm or ymm based
-#elif defined(__x86_64__)
-#define _FEC_USE_64BIT
-#elif defined(__MMX__)
-#define _FEC_USE_MMX
-#elif defined(__i386__)
-#define _FEC_USE_32BIT
-#else
-#error all cases should be defined
+
+#if ((defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__)) || \
+    ((defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)) || /* TODO: FEAT_PMULL is needed in processor */ \
+    (defined(__sparc__) && defined(__VIS) && __VIS >= 0x300) || \
+    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
+    0
+#define FEC_HAS_CLMUL64
 #endif
+
+#if defined(FEC_HAS_CLMUL64) || \
+    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 32) || \
+    0
+#define FEC_HAS_CLMUL32
+#endif
+
+#if ((defined(__x86_64__) || defined(__i386__)) && defined(__SSE2__)) || \
+    ((defined(__aarch64__) || defined(__arm__)) && __ARM_NEON) || \
+    (defined(__mips__) && __mips_msa) || \
+    (defined(__powerpc__) && __ALTIVEC__) || \
+    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    0
+#define FEC_HAS_128_INT_VEC
+#endif
+
+#if defined(FEC_HAS_128_INT_VEC) || \
+    ((defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)) || \
+    (defined(__sparc__) && defined(__VIS) && __VIS >= 0x100) || \
+    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 64/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    0
+#define FEC_HAS_64_INT_VEC
+#endif
+
+#if defined(__LP64__) || \
+    defined(__x86_64__) || \
+    defined(__aarch64__) || \
+    defined(__mips64) || \
+    defined(__powerpc64__) || \
+    (defined(__riscv__) && __riscv_xlen == 64) || \
+    0
+#define FEC_HAS_64BIT
+#endif
+
+#if __INT_MAX__ > __SHRT_MAX__
+#define FEC_HAS_32BIT
+#endif
+
+// very weird case because x86_64 imples SSE2
+// but if x86_64 with only mmx, then we prefer regular 64bit impl
+#if defined(__x86_64__) && !defined(FEC_HAS_128_INT_VEC) && defined(FEC_HAS_64_INT_VEC) && !defined(__SSE__)
+#undef FEC_HAS_64_INT_VEC
+#endif
+
+// #if defined(FEC_HAS_CLMUL64)
+// #define FEC_USE_CLMUL64
+// #elif 
+
+// #endif
+
 #endif
 
 
-#if defined(_FEC_USE_CLMUL)
+#if defined(FEC_HAS_CLMUL32)
 typedef uint32_t fec_perf_int_t;
-#elif defined(_FEC_USE_SSE2)
+#elif defined(FEC_HAS_64_INT_VEC)
 typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
-#elif defined(_FEC_USE_64BIT)
+#elif defined(FEC_HAS_64BIT)
 typedef uint64_t fec_perf_int_t[4];
-#elif defined(_FEC_USE_MMX)
-typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
-#elif defined(_FEC_USE_32BIT)
+#elif defined(FEC_HAS_32BIT)
 typedef uint32_t fec_perf_int_t[8];
 #else
 typedef uint16_t fec_perf_int_t;

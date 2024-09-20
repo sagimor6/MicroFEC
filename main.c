@@ -1,3 +1,6 @@
+#ifndef WIN32
+#define _GNU_SOURCE
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -96,6 +99,7 @@ cleanup:
     return t;
 }
 #else
+#include <sched.h>
 uint64_t get_timestamp() {
     struct timespec tp = {0};
     //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
@@ -130,6 +134,17 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     CHECK(SetThreadAffinityMask(GetCurrentThread(), 1) != 0);
     CHECK(SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS));
     CHECK(SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL));
+#else
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    CPU_SET(0, &cpu_set);
+    
+    CHECK(sched_setaffinity(0, sizeof(cpu_set), &cpu_set) == 0);
+
+    struct sched_param sched_param = {0};
+    sched_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    CHECK(sched_param.sched_priority >= 0);
+    CHECK(sched_setscheduler(0, SCHED_FIFO, &sched_param) == 0);
 #endif
 
     CHECK((pak_len % sizeof(fec_int_t)) == 0);
