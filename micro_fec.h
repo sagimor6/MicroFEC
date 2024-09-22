@@ -103,11 +103,23 @@ typedef struct {
 
 #endif
 
+// #undef FEC_HAS_CLMUL32
+// #undef FEC_HAS_CLMUL64
+// #undef FEC_HAS_128_INT_VEC
+// #undef FEC_HAS_64_INT_VEC
+// #undef FEC_HAS_64BIT
+// #undef FEC_HAS_32BIT
 
 #if defined(FEC_HAS_CLMUL32)
 typedef uint32_t fec_perf_int_t;
 #elif defined(FEC_HAS_64_INT_VEC)
+#if defined(FEC_HAS_128_INT_VEC) || !(defined(__x86_64__) || defined(__i386__))
 typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
+typedef uint16_t __attribute__ ((vector_size (32))) __attribute__((aligned(16))) fec_perf_int_t;
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
+typedef uint16_t __attribute__ ((vector_size (32))) __attribute__((aligned(8))) fec_perf_int_t;
+#endif
 #elif defined(FEC_HAS_64BIT)
 typedef uint64_t fec_perf_int_t[4];
 #elif defined(FEC_HAS_32BIT)
