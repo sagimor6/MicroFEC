@@ -922,6 +922,7 @@ void fec_tx_init_perf_arr_mmx(__m64* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0])*4);
 }
 
+#if (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
 void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) __attribute__((used)) fec_tx_col_op_mmx(__m64* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     fec_idx_t i;
 
@@ -953,17 +954,13 @@ void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) __attribute__((used
         }
     }
 }
+#endif
 
 #if (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
 void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_tx_col_op_sse(__m128* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     fec_idx_t i;
 
-    // u16x16 shifts = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-
-    // u16x16 _a2 = (u16x16)(((i16x16)(a << shifts)) >> 15);
-
     int j;
-    //__m64 _a_mmx[4] __attribute__((aligned(16)));
     union {
         __m64 mmx[4];
         __m128 sse[2];
@@ -994,25 +991,12 @@ void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_tx_col_op_sse(_
             : "=x"(_a_high)
             : "m"(_a_tmp.sse[1])
             : );
-    
-
-    // i16x8 _sel = {0, 0, -1, 0, 0, -1, -1, -1};
-    
-    // ux16x8 _a_low = _mm_shuffle_ps(_sel, _sel, (uint8_t)a);
 
     for (i = 0; i < pak_len; i++) {
 
-        // u16x16 _c = _a2 & pak[i];
-        //out_pak[i] ^= _c;
-
         uint16_t pak_val = pak[i];
-        // union {
-        //     uint32_t u;
-        //     float f;
-        // } pak_val_2 = {.u = (pak_val | (((uint32_t)pak_val) << 16))};
 
         uint32_t pak_val_2 =  (pak_val | (((uint32_t)pak_val) << 16));
-        //register __m128 pak_val_8 = _mm_set1_ps(pak_val_2.f);
         __m128 pak_val_8;
 
         __m128 res;
@@ -1023,29 +1007,6 @@ void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_tx_col_op_sse(_
             : [pak_val_8] "=x"(pak_val_8)
             : [pak_val_2] "m"(pak_val_2)
             : );
-        
-        // volatile __m128 aaa;
-        // aaa = res;
-
-        // if (memcmp(&_a_low, (void*)&aaa, sizeof(aaa)) != 0) {
-        //     printf("asdfasfdsf\n");
-        //     printf("%llx\n", (uint64_t)__a);
-        //     printf("%04x\n", a);
-        //     for(j = 0; j < 8; j++) {
-        //         printf("%04x %04x\n", ((u16x8)aaa)[j], ((u16x8)_a_low)[j]);
-        //     }
-        //     exit(1);
-        // }
-
-
-// #define my_mm_loada_128()
-//         asm inline(
-//             "movaps %1, %0;"
-//         : "+m"(out_pak[i*4 + j]), "+y"(res)
-//         : 
-//         : );
-
-        //__m128 res = _mm_and_ps(_a_low, pak_val_8);
 
         res = pak_val_8;
 
@@ -1061,8 +1022,6 @@ void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_tx_col_op_sse(_
             : "+m"(out_pak[2*i]), "+x"(res)
             : 
             : );
-        
-        // res = _mm_and_ps(_a_high, pak_val_8);
 
         res = pak_val_8;
 
@@ -1112,13 +1071,13 @@ void fec_tx_col_perf_to_norm_mmx(unaligend_fec_int_t* restrict out_pak, const ui
 
 #endif
 
-#ifdef FEC_HAS_64BIT
+#if defined(FEC_HAS_64BIT)
 
-void fec_tx_init_perf_arr_reg(uint64_t* restrict out_pak, size_t pak_len) {
+void fec_tx_init_perf_arr_reg64(uint64_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0])*4);
 }
 
-void PERF_DEBUG_ATTRS fec_tx_col_op_reg(uint64_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
+void PERF_DEBUG_ATTRS fec_tx_col_op_reg64(uint64_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
 
     int j;
     uint64_t _a[4];
@@ -1143,7 +1102,7 @@ void PERF_DEBUG_ATTRS fec_tx_col_op_reg(uint64_t* restrict out_pak, const unalig
     }
 }
 
-void fec_tx_col_perf_to_norm_reg(unaligend_fec_int_t* restrict out_pak, const uint16_t* restrict perf_pak, size_t pak_len) {
+void fec_tx_col_perf_to_norm_reg64(unaligend_fec_int_t* restrict out_pak, const uint16_t* restrict perf_pak, size_t pak_len) {
     fec_idx_t i;
     int j;
     for (i = 0; i < pak_len; i++) {
@@ -1186,7 +1145,7 @@ void PERF_DEBUG_ATTRS fec_tx_col_op_reg32(uint32_t* restrict out_pak, const unal
     
     #pragma GCC unroll 8
     for (j = 0; j < 8; j++) {
-        _a[j] = (((int16_t)(a << (16 - 1 - (j*2 + 0)))) >> 15) | (((uint32_t)((int16_t)(a << (16 - 1 - (j*2 + 1)))) >> 15) << 16);
+        _a[j] = ((uint16_t)(((int16_t)(a << (16 - 1 - (j*2 + 0)))) >> 15)) | (((uint32_t)((uint16_t)(((int16_t)(a << (16 - 1 - (j*2 + 1)))) >> 15))) << 16);
     }
 
     for (i = 0; i < pak_len; i++) {
@@ -1412,13 +1371,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 //     fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
 
 #elif defined(FEC_HAS_64BIT)
-    // fec_tx_init_perf_arr_reg((uint64_t*)tmp_pak, pak_len);
+    // fec_tx_init_perf_arr_reg64((uint64_t*)tmp_pak, pak_len);
     // for (i = 0; i < n; i++) {
     //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
     //     const unaligend_fec_int_t* pak = paks[i];
-    //     fec_tx_col_op_reg((uint64_t*)tmp_pak, pak, pak_len, a_i);
+    //     fec_tx_col_op_reg64((uint64_t*)tmp_pak, pak, pak_len, a_i);
     // }
-    // fec_tx_col_perf_to_norm_reg(out_pak, (const uint16_t*)tmp_pak, pak_len);
+    // fec_tx_col_perf_to_norm_reg64(out_pak, (const uint16_t*)tmp_pak, pak_len);
 
     size_t k;
 
@@ -1427,7 +1386,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     
     for (k = 0; k < pak_len; k += 8*1024U) {
         size_t cur_pak_len = MIN(pak_len - k, 8*1024U);
-        fec_tx_init_perf_arr_reg((uint64_t*)tmp_pak, cur_pak_len);
+        fec_tx_init_perf_arr_reg64((uint64_t*)tmp_pak, cur_pak_len);
         for (i = 0; i < n; i++) {
             fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
             const unaligend_fec_int_t* pak = paks[i];
@@ -1438,18 +1397,18 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
             //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
             //     // }
             // }
-            fec_tx_col_op_reg((uint64_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
+            fec_tx_col_op_reg64((uint64_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
         }
-        fec_tx_col_perf_to_norm_reg(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
+        fec_tx_col_perf_to_norm_reg64(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
     }
 #elif defined(FEC_HAS_32BIT)
-    // fec_tx_init_perf_arr_reg((uint32_t*)tmp_pak, pak_len);
+    // fec_tx_init_perf_arr_reg32((uint32_t*)tmp_pak, pak_len);
     // for (i = 0; i < n; i++) {
     //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
     //     const unaligend_fec_int_t* pak = paks[i];
-    //     fec_tx_col_op_reg((uint32_t*)tmp_pak, pak, pak_len, a_i);
+    //     fec_tx_col_op_reg32((uint32_t*)tmp_pak, pak, pak_len, a_i);
     // }
-    // fec_tx_col_perf_to_norm_reg(out_pak, (const uint16_t*)tmp_pak, pak_len);
+    // fec_tx_col_perf_to_norm_reg32(out_pak, (const uint16_t*)tmp_pak, pak_len);
 
     size_t k;
     
@@ -2199,7 +2158,6 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_perf_int_t* restrict recovered,
 
 #ifdef FEC_HAS_CLMUL64
 static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
-    inv_arr = inv_arr - 1;
     fec_idx_t i;
 
     _poly_t _b = _POLY_INT_TO_POLY(pak_val);
@@ -2229,8 +2187,6 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, con
 #endif
 
 static void PERF_DEBUG_ATTRS __fec_rx_col_op_5(u16x16* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
-    inv_arr = inv_arr - 1;
-
     fec_idx_t i;
 
     u16x16 shifts = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
@@ -2245,9 +2201,9 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op_5(u16x16* restrict recovered, const
 }
 
 #ifdef FEC_HAS_64_INT_VEC
-void PERF_DEBUG_ATTRS fec_rx_col_op_mmx(__m64* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
-    inv_arr = inv_arr - 1;
 
+#if (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
+void PERF_DEBUG_ATTRS fec_rx_col_op_mmx(__m64* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     fec_idx_t i;
 
     int j;
@@ -2279,6 +2235,147 @@ void PERF_DEBUG_ATTRS fec_rx_col_op_mmx(__m64* restrict recovered, const fec_int
 }
 #endif
 
+#if (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
+void PERF_DEBUG_ATTRS __attribute__((visibility("default"))) fec_rx_col_op_sse(__m128* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+    fec_idx_t i;
+
+    int j;
+    union {
+        __m64 mmx[4];
+        __m128 sse[2];
+    } _pak_val_tmp;
+    const __m64 __pak_val = _mm_set1_pi16(pak_val);
+    
+    #pragma GCC unroll 4
+    for (j = 0; j < 4; j++) {
+        __m64 res = _mm_srai_pi16(_mm_mullo_pi16(__pak_val, (__m64)(u16x4){1 << (15 - (j*4 + 0)), 1 << (15 - (j*4 + 1)), 1 << (15 - (j*4 + 2)), 1 << (15 - (j*4 + 3))}), 15);
+        asm inline(
+                "movq %1, %0;"
+            : "=m"(_pak_val_tmp.mmx[j])
+            : "y"(res)
+            : );
+    }
+
+     __m128 _pak_val_low;
+     __m128 _pak_val_high;
+
+    asm inline(
+                "movaps %1, %0;"
+            : "=x"(_pak_val_low)
+            : "m"(_pak_val_tmp.sse[0])
+            : );
+    
+    asm inline(
+                "movaps %1, %0;"
+            : "=x"(_pak_val_high)
+            : "m"(_pak_val_tmp.sse[1])
+            : );
+
+    for (i = 0; i < num_y_missing; i++) {
+
+        uint16_t a = inv_arr[poly_add(pak_xy, missing_y[i])];
+
+        uint32_t a_2 =  (a | (((uint32_t)a) << 16));
+        __m128 a_8;
+
+        __m128 res;
+
+        asm inline(
+                "movss %[a_2], %[a_8];"
+                "shufps $0, %[a_8], %[a_8];"
+            : [a_8] "=x"(a_8)
+            : [a_2] "m"(a_2)
+            : );
+
+        res = a_8;
+
+        asm inline(
+                "andps %[_pak_val_low], %[res];"
+            : [res] "+x"(res)
+            : [_pak_val_low] "x"(_pak_val_low)
+            : );
+
+        asm inline(
+                "xorps %0, %1;"
+                "movaps %1, %0;"
+            : "+m"(recovered[2*i]), "+x"(res)
+            : 
+            : );
+
+        res = a_8;
+
+        asm inline(
+                "andps %[_pak_val_high], %[res];"
+            : [res] "+x"(res)
+            : [_pak_val_high] "x"(_pak_val_high)
+            : );
+
+        asm inline(
+                "xorps %0, %1;"
+                "movaps %1, %0;"
+            : "+m"(recovered[2*i + 1]), "+x"(res)
+            : 
+            : );
+
+        // recovered[2*i] = _mm_xor_ps(recovered[2*i], _mm_and_ps(_pak_val_low, a_8));
+        // recovered[2*i + 1] = _mm_xor_ps(recovered[2*i + 1], _mm_and_ps(_pak_val_high, a_8));
+    }
+}
+#endif
+
+#endif
+
+#if defined(FEC_HAS_64BIT)
+void PERF_DEBUG_ATTRS fec_rx_col_op_reg64(uint64_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+
+    int j;
+    uint64_t _pak_val[4];
+
+    fec_idx_t i;
+    
+    #pragma GCC unroll 4
+    for (j = 0; j < 4; j++) {
+        _pak_val[j] = pak_val * ((1ULL<<((16+1)*(4*j+0) - 64*j)) + (1ULL<<((16+1)*(4*j+1) - 64*j)) + (1ULL<<((16+1)*(4*j+2) - 64*j)) + (1ULL<<((16+1)*(4*j+3) - 64*j)));
+        _pak_val[j] >>= (16-1);
+        _pak_val[j] &= (1ULL<<(16*0)) | (1ULL<<(16*1)) | (1ULL<<(16*2)) | (1ULL<<(16*3));
+        _pak_val[j] *= (1<<16) - 1;
+    }
+
+    for (i = 0; i < num_y_missing; i++) {
+        uint64_t b = (inv_arr[poly_add(pak_xy, missing_y[i])] * ((1ULL<<(16*0)) + (1ULL<<(16*1)) + (1ULL<<(16*2)) + (1ULL<<(16*3))));
+
+        #pragma GCC unroll 4
+        for (j = 0; j < 4; j++) {
+            recovered[i*4+j] ^= _pak_val[j] & b;
+        }
+    }
+}
+#endif
+
+#if defined(FEC_HAS_32BIT)
+void PERF_DEBUG_ATTRS fec_rx_col_op_reg32(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+
+    int j;
+    uint32_t _pak_val[8];
+
+    fec_idx_t i;
+    
+    #pragma GCC unroll 8
+    for (j = 0; j < 8; j++) {
+        _pak_val[j] = ((uint16_t)(((int16_t)(pak_val << (16 - 1 - (j*2 + 0)))) >> 15)) | (((uint32_t)((uint16_t)(((int16_t)(pak_val << (16 - 1 - (j*2 + 1)))) >> 15))) << 16);
+    }
+
+    for (i = 0; i < num_y_missing; i++) {
+        uint16_t b = inv_arr[poly_add(pak_xy, missing_y[i])];
+        uint32_t b_2 = b | (((uint32_t)b) << 16);
+
+        #pragma GCC unroll 8
+        for (j = 0; j < 8; j++) {
+            recovered[i*8+j] ^= _pak_val[j] & b_2;
+        }
+    }
+}
+#endif
 
 fec_int_t PERF_DEBUG_ATTRS __fec_rx_row_op(const unaligend_fec_int_t * const* pak_arr, fec_idx_t num, size_t ii, const fec_int_t* xy_arr, fec_int_t missing_y_i, const fec_int_t *inv_arr, fec_int_t ones_pak_ii) {
     fec_idx_t j;
@@ -3060,7 +3157,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
     fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + 0x1f) & ~0x1fULL);
     //fec_perf_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
-    const fec_int_t* inv_arr = inv_cache->inv_arr;
+    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
 
     for (ii = 0; ii < pak_len; ii++) {
         
@@ -3128,7 +3225,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
                 _GET_X_PAK(i)[ii] = _POLY_TO_FEC_INT(_c);
             }
         }
-#elif defined(FEC_HAS_128_INT_VEC) && 0
+#elif defined(FEC_HAS_128_INT_VEC) || defined(FEC_HAS_64_INT_VEC)
         {
             for (i = 0; i < num_y_missing; i++) {
                 tmp_recovered_ints[i] = (u16x16){ones_pak_ii, 0};
@@ -3137,9 +3234,16 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
             for (j = 0; j < num_y_present + num_x_present; j++) {
                 fec_int_t xy_j = present_y[j];
                 fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+#if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
                 __fec_rx_col_op_5(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
+                fec_rx_col_op_sse((__m128*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+#elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
+                fec_rx_col_op_mmx((__m64*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+#endif          
             }
 
+#if defined(FEC_HAS_128_INT_VEC)
             u32x8 shifts1 = {0, 2, 4, 6, 8, 10, 12, 14};
             u32x8 shifts2 = {1, 3, 5, 7, 9, 11, 13, 15};
 
@@ -3166,21 +3270,89 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
                 _GET_X_PAK(i)[ii] = ((u16x8)(res6 ^ res9 ^ res12))[0];
 
             }
+#else
+
+            for (i = 0; i < num_y_missing; i++) {
+
+                uint32_t res = 0;
+                int jj;
+                for (jj = 0; jj < 16; jj++) {
+                    res ^= ((uint32_t)(((uint16_t*)tmp_recovered_ints)[i*16 + jj])) << jj;
+                }
+
+                uint16_t res4 = res;
+                uint32_t carry = res >> 16;
+
+                carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+                res4 ^= carry;
+
+                carry = carry >> 16;
+                
+                res4 ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+                _GET_X_PAK(i)[ii] = res4;
+            }
+
+#if defined(__x86_64__) || defined(__i386__)
+            _mm_empty();
+#endif
+#endif
         }
-#elif defined(FEC_HAS_64_INT_VEC)
+#elif defined(FEC_HAS_64BIT)
     {
         for (i = 0; i < num_y_missing; i++) {
-            tmp_recovered_ints[i] = (u16x16){ones_pak_ii, 0};
+            ((uint64_t*)&tmp_recovered_ints[i])[0] = 0;
+            ((uint64_t*)&tmp_recovered_ints[i])[1] = 0;
+            ((uint64_t*)&tmp_recovered_ints[i])[2] = 0;
+            ((uint64_t*)&tmp_recovered_ints[i])[3] = (((uint64_t)ones_pak_ii) << (64-16));
         }
-
+        
         for (j = 0; j < num_y_present + num_x_present; j++) {
             fec_int_t xy_j = present_y[j];
             fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
-            fec_rx_col_op_mmx((__m64*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+            fec_rx_col_op_reg64((uint64_t*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
         }
 
         for (i = 0; i < num_y_missing; i++) {
+            uint32_t res = 0;
+            int jj;
+            for (jj = 0; jj < 16; jj++) {
+                res ^= ((uint32_t)(((uint16_t*)tmp_recovered_ints)[i*16 + jj])) << (16 - 1 - jj);
+            }
 
+            uint16_t res4 = res;
+            uint32_t carry = res >> 16;
+
+            carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+            res4 ^= carry;
+
+            carry = carry >> 16;
+            
+            res4 ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+            _GET_X_PAK(i)[ii] = res4;
+        }
+    }
+
+#elif defined(FEC_HAS_32BIT)
+    {
+        for (i = 0; i < num_y_missing; i++) {
+            unsigned int jj;
+            ((uint32_t*)&tmp_recovered_ints[i])[0] = ones_pak_ii;
+            for (jj = 1; jj < 8; jj++) {
+                ((uint32_t*)&tmp_recovered_ints[i])[jj] = 0;
+            }
+        }
+        
+        for (j = 0; j < num_y_present + num_x_present; j++) {
+            fec_int_t xy_j = present_y[j];
+            fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+            fec_rx_col_op_reg32((uint32_t*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+        }
+
+        for (i = 0; i < num_y_missing; i++) {
             uint32_t res = 0;
             int jj;
             for (jj = 0; jj < 16; jj++) {
@@ -3203,27 +3375,23 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #else
-        // for (i = 0; i < num_y_missing; i++) {
-        //     tmp_recovered_ints[i] = ones_pak_ii;
-        // }
+        for (i = 0; i < num_y_missing; i++) {
+            tmp_recovered_ints[i] = ones_pak_ii;
+        }
 
-        // for (j = 0; j < num_y_present + num_x_present; j++) {
-        //     fec_int_t xy_j = present_y[j];
-        //     fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
-        //     for (i = 0; i < num_y_missing; i++) {
-        //         fec_int_t missing_y_i = missing_y[i];
-        //         tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
-        //     }
-        // }
-        // for (i = 0; i < num_y_missing; i++) {
-        //     _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
-        // }
+        for (j = 0; j < num_y_present + num_x_present; j++) {
+            fec_int_t xy_j = present_y[j];
+            fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
+            for (i = 0; i < num_y_missing; i++) {
+                fec_int_t missing_y_i = missing_y[i];
+                tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+            }
+        }
+        for (i = 0; i < num_y_missing; i++) {
+            _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
+        }
 #endif
     }
-
-#if defined(_FEC_USE_POLY_MUL4_MMX) || defined(FEC_HAS_64_INT_VEC)
-    _mm_empty();
-#endif
 
 #ifdef PERF_DEBUG
     end_time = get_timestamp();
