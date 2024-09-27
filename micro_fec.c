@@ -95,83 +95,71 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #error all cases should be defined
 #endif
 
+#if defined(FEC_HAS_CLMUL32)
+
 #if (defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__) && defined(__SSE2__)
 #define _poly_t u32x4
-#define _POLY_INT_TO_POLY(val) ((_poly_t){(val), 0, 0, 0})
-#define _POLY_TO_FEC_INT(poly_val) (((u16x8)(poly_val))[0])
-#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)_mm_clmulepi64_si128((__m128i)(poly1), (__m128i)(poly2), 0))
-#define _POLY_TWO_INT_TO_POLY(val1, val2) ((_poly_t){(val1), (val2), 0, 0})
-#define _POLY_GET_LOWER_32(poly_val) ((poly_val)[0])
-#define _POLY_GET_UPPER_32(poly_val) ((poly_val)[1])
-#define _POLY_GET_LOWER_FEC_INT(poly_val) (((u16x8)(poly_val))[0])
-#define _POLY_GET_UPPER_FEC_INT(poly_val) (((u16x8)(poly_val))[2])
-#define _POLY_TWO_SHIFT_RIGHT(poly_val, shift) ((poly_val) >> shift)
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)_mm_clmulepi64_si128((__m128i)(poly1), (__m128i)(poly2), 0))
+#define _POLY_2VAL(val1, val2) ((_poly_t){(val1), (val2), 0, 0})
+#define _POLY_EXTRACT(poly_val, typ, idx) (((typ __attribute__((vector_size (16))))(poly_val))[idx])
+#define _POLY_VEC_SHIFT(poly_val, shift) ((poly_val) >> shift)
 #elif (defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)
 // TODO: FEAT_PMULL is needed in processor
 #define _poly_t poly64_t
-#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)vmull_p64((poly1), (poly2)))
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)vmull_p64((poly1), (poly2)))
 #elif defined(__sparc__) && defined(__VIS) && __VIS >= 0x300
 #define _poly_t uint64_t
-#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_vis_xmulx((int64_t)(poly1), (int64_t)(poly2)))
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_vis_xmulx((int64_t)(poly1), (int64_t)(poly2)))
 #elif defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc))
 #if __riscv_xlen == 64
 #define _poly_t uint64_t
-#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_64((poly1), (poly2)))
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_64((poly1), (poly2)))
 #elif __riscv_xlen == 32
 #define _poly_t uint32_t
-#define _POLY_SINGLE_MUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_32((poly1), (poly2)))
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_32((poly1), (poly2)))
 #endif
 #endif
 
-#ifdef FEC_HAS_CLMUL32
-#ifndef _POLY_INT_TO_POLY
-#define _POLY_INT_TO_POLY(val) ((_poly_t)(val))
-#endif
-#ifndef _POLY_TO_FEC_INT
-#define _POLY_TO_FEC_INT(poly_val) ((fec_int_t)(poly_val))
-#endif
-#endif
 
+#ifndef _POLY_2VAL
 #ifdef FEC_HAS_CLMUL64
-#ifndef _POLY_TWO_INT_TO_POLY
-#define _POLY_TWO_INT_TO_POLY(val1, val2) ((_poly_t)((val1) |  (((_poly_t)(val2)) << 32)))
+#define _POLY_2VAL(val1, val2) ((_poly_t)((val1) |  (((_poly_t)(val2)) << 32)))
+#else
+#define _POLY_2VAL(val1, val2) ((_poly_t)(val1))
 #endif
-#ifndef _POLY_GET_LOWER_32
-#define _POLY_GET_LOWER_32(poly_val) ((uint32_t)(poly_val))
 #endif
-#ifndef _POLY_GET_UPPER_32
-#define _POLY_GET_UPPER_32(poly_val) ((uint32_t)((poly_val) >> 32))
+
+#define _POLY_1VAL(val) _POLY_2VAL(val, 0)
+
+#ifndef _POLY_EXTRACT
+#define _POLY_EXTRACT(poly_val, typ, idx) ((typ)((poly_val) >> (sizeof(typ)*8*idx)))
 #endif
-#ifndef _POLY_GET_LOWER_FEC_INT
-#define _POLY_GET_LOWER_FEC_INT(poly_val) ((fec_int_t)(poly_val))
+
+#ifndef _POLY_VEC_SHIFT
+#define _POLY_VEC_SHIFT(poly_val, shift) (((poly_val) >> (shift)) & (~((1ULL << 32) - (1ULL (32 - (shift))))))
 #endif
-#ifndef _POLY_GET_UPPER_FEC_INT
-#define _POLY_GET_UPPER_FEC_INT(poly_val) ((fec_int_t)((poly_val) >> 32))
-#endif
-#ifndef _POLY_TWO_SHIFT_RIGHT
-#define _POLY_TWO_SHIFT_RIGHT(poly_val, shift) (((poly_val) >> (shift)) & (~((1ULL << 32) - (1ULL (32 - (shift))))))
-#endif
+
 #endif
 
 
 static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
 #if defined(FEC_HAS_CLMUL32)
 
-    _poly_t _a = _POLY_INT_TO_POLY(a);
-    _poly_t _b = _POLY_INT_TO_POLY(b);
-    _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+    _poly_t _a = _POLY_1VAL(a);
+    _poly_t _b = _POLY_1VAL(b);
+    _poly_t _poly = _POLY_1VAL(POLY_G);
 
     _poly_t _c;
-    _c = _POLY_SINGLE_MUL(_a, _b);
+    _c = _POLY_CLMUL(_a, _b);
     _poly_t _d;
     _d = _c >> 16;
-    _d = _POLY_SINGLE_MUL(_d, _poly);
+    _d = _POLY_CLMUL(_d, _poly);
     _c ^= _d;
     _d >>= 16;
-    _d = _POLY_SINGLE_MUL(_d, _poly);
+    _d = _POLY_CLMUL(_d, _poly);
     _c ^= _d;
     
-    return _POLY_TO_FEC_INT(_c);
+    return _POLY_EXTRACT(_c, uint16_t, 0);
 #else
     size_t i;
     fec_int_t res = 0;
@@ -716,54 +704,54 @@ void fec_tx_init_perf_arr_clmul64(uint32_t* restrict out_pak, size_t pak_len) {
 void PERF_DEBUG_ATTRS fec_tx_col_op_clmul64(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     size_t j;
 
-    _poly_t _a = _POLY_INT_TO_POLY(a);
+    _poly_t _a = _POLY_1VAL(a);
 
     for (j = 0; j < pak_len - 1; j += 2) {
-        _poly_t _b = _POLY_TWO_INT_TO_POLY(pak[j], pak[j+1]);
+        _poly_t _b = _POLY_2VAL(pak[j], pak[j+1]);
 
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
 
-        out_pak[j] ^= _POLY_GET_LOWER_32(_c);
-        out_pak[j+1] ^= _POLY_GET_UPPER_32(_c);
+        out_pak[j] ^= _POLY_EXTRACT(_c, uint32_t, 0);
+        out_pak[j+1] ^= _POLY_EXTRACT(_c, uint32_t, 1);
     }
     
     if (j == pak_len - 1) {
-        _poly_t _b = _POLY_INT_TO_POLY(pak[j]);
+        _poly_t _b = _POLY_1VAL(pak[j]);
 
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
 
-        out_pak[j] ^= _POLY_GET_LOWER_32(_c);
+        out_pak[j] ^= _POLY_EXTRACT(_c, uint32_t, 0);
     }
 }
 
 void fec_tx_col_perf_to_norm_clmul64(unaligend_fec_int_t* restrict out_pak, const uint32_t* restrict perf_pak, size_t pak_len) {
     size_t j;
-    _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+    _poly_t _poly = _POLY_1VAL(POLY_G);
 
     for (j = 0; j < pak_len - 1; j += 2) {
 
-        _poly_t _c = _POLY_TWO_INT_TO_POLY(perf_pak[j], perf_pak[j+1]);
-        _poly_t _d = _POLY_TWO_SHIFT_RIGHT(_c, 16);
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _poly_t _c = _POLY_2VAL(perf_pak[j], perf_pak[j+1]);
+        _poly_t _d = _POLY_VEC_SHIFT(_c, 16);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
-        _d = _POLY_TWO_SHIFT_RIGHT(_d, 16);
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _d = _POLY_VEC_SHIFT(_d, 16);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
         
-        out_pak[j] = _POLY_GET_LOWER_FEC_INT(_c);
-        out_pak[j+1] = _POLY_GET_UPPER_FEC_INT(_c);
+        out_pak[j] = _POLY_EXTRACT(_c, uint16_t, 0);
+        out_pak[j+1] = _POLY_EXTRACT(_c, uint16_t, 2);
     }
 
     if (j == pak_len - 1) {
-        _poly_t _c = _POLY_INT_TO_POLY(perf_pak[j]);
+        _poly_t _c = _POLY_1VAL(perf_pak[j]);
         _poly_t _d = _c >> 16;
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
         _d >>= 16;
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
         
-        out_pak[j] = _POLY_TO_FEC_INT(_c);
+        out_pak[j] = _POLY_EXTRACT(_c, uint16_t, 0);
     }
 }
 #endif
@@ -776,31 +764,31 @@ void fec_tx_init_perf_arr_clmul32(uint32_t* restrict out_pak, size_t pak_len) {
 void PERF_DEBUG_ATTRS fec_tx_col_op_clmul32(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     size_t j;
 
-    _poly_t _a = _POLY_INT_TO_POLY(a);
+    _poly_t _a = _POLY_1VAL(a);
 
     for (j = 0; j < pak_len; j++) {
-        _poly_t _b = _POLY_INT_TO_POLY(pak[j]);
+        _poly_t _b = _POLY_1VAL(pak[j]);
 
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
 
-        out_pak[j] ^= _POLY_GET_LOWER_32(_c);
+        out_pak[j] ^= _POLY_EXTRACT(_c, uint32_t, 0);
     }
 }
 
 void fec_tx_col_perf_to_norm_clmul32(unaligend_fec_int_t* restrict out_pak, const uint32_t* restrict perf_pak, size_t pak_len) {
     size_t j;
-    _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+    _poly_t _poly = _POLY_1VAL(POLY_G);
 
     for (j = 0; j < pak_len; j++) {
-        _poly_t _c = _POLY_INT_TO_POLY(perf_pak[j]);
+        _poly_t _c = _POLY_1VAL(perf_pak[j]);
         _poly_t _d = _c >> 16;
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
         _d >>= 16;
-        _d = _POLY_SINGLE_MUL(_d, _poly);
+        _d = _POLY_CLMUL(_d, _poly);
         _c ^= _d;
         
-        out_pak[j] = _POLY_TO_FEC_INT(_c);
+        out_pak[j] = _POLY_EXTRACT(_c, uint16_t, 0);
     }
 }
 #endif
@@ -2126,7 +2114,7 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_perf_int_t* restrict recovered,
 static void PERF_DEBUG_ATTRS fec_rx_col_op_clmul64(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     fec_idx_t i;
 
-    _poly_t _b = _POLY_INT_TO_POLY(pak_val);
+    _poly_t _b = _POLY_1VAL(pak_val);
     
     for (i = 0; i < num_y_missing - 1; i+=2) {
         // uint32_t h = ((uint32_t*)missing_y)[i/2];
@@ -2135,19 +2123,19 @@ static void PERF_DEBUG_ATTRS fec_rx_col_op_clmul64(uint32_t* restrict recovered,
         uint16_t a1 = inv_arr[poly_add(pak_xy, missing_y[i])];
         uint16_t a2 = inv_arr[poly_add(pak_xy, missing_y[i+1])];
 
-        _poly_t _a = _POLY_TWO_INT_TO_POLY(a1, a2);
+        _poly_t _a = _POLY_2VAL(a1, a2);
 
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
         
-        recovered[i] ^= _POLY_GET_LOWER_32(_c);
-        recovered[i+1] ^= _POLY_GET_UPPER_32(_c);
+        recovered[i] ^= _POLY_EXTRACT(_c, uint32_t, 0);
+        recovered[i+1] ^= _POLY_EXTRACT(_c, uint32_t, 1);
     }
 
     if (i == num_y_missing - 1) {
         uint16_t a1 = inv_arr[poly_add(pak_xy, missing_y[i])];
-        _poly_t _a = _POLY_INT_TO_POLY(a1);
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
-        recovered[i] ^= _POLY_GET_LOWER_32(_c);
+        _poly_t _a = _POLY_1VAL(a1);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
+        recovered[i] ^= _POLY_EXTRACT(_c, uint32_t, 0);
     }
 }
 #endif
@@ -2156,13 +2144,13 @@ static void PERF_DEBUG_ATTRS fec_rx_col_op_clmul64(uint32_t* restrict recovered,
 static void PERF_DEBUG_ATTRS fec_rx_col_op_clmul32(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     fec_idx_t i;
 
-    _poly_t _b = _POLY_INT_TO_POLY(pak_val);
+    _poly_t _b = _POLY_1VAL(pak_val);
     
     for (i = 0; i < num_y_missing; i++) {
         uint16_t a = inv_arr[poly_add(pak_xy, missing_y[i])];
-        _poly_t _a = _POLY_INT_TO_POLY(a);
-        _poly_t _c = _POLY_SINGLE_MUL(_a, _b);
-        recovered[i] ^= _POLY_GET_LOWER_32(_c);
+        _poly_t _a = _POLY_1VAL(a);
+        _poly_t _c = _POLY_CLMUL(_a, _b);
+        recovered[i] ^= _POLY_EXTRACT(_c, uint32_t, 0);
     }
 }
 #endif
@@ -3179,32 +3167,32 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
                 fec_rx_col_op_clmul64(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
             }
 
-            _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+            _poly_t _poly = _POLY_1VAL(POLY_G);
 
             for (i = 0; i < num_y_missing - 1; i += 2) {
 
-                _poly_t _c = _POLY_TWO_INT_TO_POLY(tmp_recovered_ints[i], tmp_recovered_ints[i+1]);
-                _poly_t _d = _POLY_TWO_SHIFT_RIGHT(_c, 16);
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _poly_t _c = _POLY_2VAL(tmp_recovered_ints[i], tmp_recovered_ints[i+1]);
+                _poly_t _d = _POLY_VEC_SHIFT(_c, 16);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
-                _d = _POLY_TWO_SHIFT_RIGHT(_d, 16);
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _d = _POLY_VEC_SHIFT(_d, 16);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
                 
-                _GET_X_PAK(i)[ii] = _POLY_GET_LOWER_FEC_INT(_c);
-                _GET_X_PAK(i+1)[ii] = _POLY_GET_UPPER_FEC_INT(_c);
+                _GET_X_PAK(i)[ii] = _POLY_EXTRACT(_c, uint16_t, 0);
+                _GET_X_PAK(i+1)[ii] = _POLY_EXTRACT(_c, uint16_t, 2);
             }
             
             if (i == num_y_missing - 1) {
-                _poly_t _c = _POLY_INT_TO_POLY(tmp_recovered_ints[i]);
+                _poly_t _c = _POLY_1VAL(tmp_recovered_ints[i]);
                 _poly_t _d = _c >> 16;
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
                 _d >>= 16;
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
 
-                _GET_X_PAK(i)[ii] = _POLY_TO_FEC_INT(_c);
+                _GET_X_PAK(i)[ii] = _POLY_EXTRACT(_c, uint16_t, 0);
             }
         }
 #elif defined(FEC_HAS_CLMUL32)
@@ -3219,18 +3207,18 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
                 fec_rx_col_op_clmul32(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
             }
 
-            _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
+            _poly_t _poly = _POLY_1VAL(POLY_G);
 
             for (i = 0; i < num_y_missing; i++) {
-                _poly_t _c = _POLY_INT_TO_POLY(tmp_recovered_ints[i]);
+                _poly_t _c = _POLY_1VAL(tmp_recovered_ints[i]);
                 _poly_t _d = _c >> 16;
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
                 _d >>= 16;
-                _d = _POLY_SINGLE_MUL(_d, _poly);
+                _d = _POLY_CLMUL(_d, _poly);
                 _c ^= _d;
 
-                _GET_X_PAK(i)[ii] = _POLY_TO_FEC_INT(_c);
+                _GET_X_PAK(i)[ii] = _POLY_EXTRACT(_c, uint16_t, 0);
             }
         }
 #elif defined(FEC_HAS_128_INT_VEC) || defined(FEC_HAS_64_INT_VEC)
