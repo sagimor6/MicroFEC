@@ -103,8 +103,8 @@ typedef struct {
 
 #endif
 
-// #undef FEC_HAS_CLMUL32
 // #undef FEC_HAS_CLMUL64
+// #undef FEC_HAS_CLMUL32
 // #undef FEC_HAS_128_INT_VEC
 // #undef FEC_HAS_64_INT_VEC
 // #undef FEC_HAS_64BIT
