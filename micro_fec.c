@@ -35,7 +35,7 @@
      _a < _b ? _a : _b; })
 #endif
 
-#define CALC_EXTRA_FOR_ALIGNED_MALLOC(typ) (__alignof__(typ) >= __alignof__(max_align_t) ? __alignof__(typ) - __alignof__(max_align_t) : 0)
+#define CALC_EXTRA_FOR_ALIGNED_MALLOC(typ) (__alignof__(typ) > __alignof__(max_align_t) ? __alignof__(typ) - __alignof__(max_align_t) : 0)
 
 #define POLY_G ((fec_int_t)0b0000000000101011)
 
@@ -93,20 +93,6 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #define _FEC_USE_POLY_MUL2
 #else
 #error all cases should be defined
-#endif
-
-#define ALIGN_UP(val, align) (((val) + (align) - 1) & (-((__typeof__(val))(align))))
-
-#if defined(_FEC_USE_POLY_MUL) || defined(_FEC_USE_POLY_MUL_CLMUL2)
-#define _FEC_ALIGN_SIZE_VAL sizeof(fec_int_t)
-#elif defined(_FEC_USE_POLY_MUL16)
-#define _FEC_ALIGN_SIZE_VAL 32
-#elif defined(_FEC_USE_POLY_MUL8)
-#define _FEC_ALIGN_SIZE_VAL 16
-#elif defined(_FEC_USE_POLY_MUL4) || defined(_FEC_USE_POLY_MUL4_MMX)
-#define _FEC_ALIGN_SIZE_VAL 8
-#elif defined(_FEC_USE_POLY_MUL2)
-#define _FEC_ALIGN_SIZE_VAL 4
 #endif
 
 #if (defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__) && defined(__SSE2__)
@@ -723,11 +709,11 @@ fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) 
 #endif
 
 #if defined(FEC_HAS_CLMUL64)
-void fec_tx_init_perf_arr(uint32_t* restrict out_pak, size_t pak_len) {
+void fec_tx_init_perf_arr_clmul64(uint32_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
 
-void PERF_DEBUG_ATTRS fec_tx_col_op(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
+void PERF_DEBUG_ATTRS fec_tx_col_op_clmul64(uint32_t* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     size_t j;
 
     _poly_t _a = _POLY_INT_TO_POLY(a);
@@ -750,7 +736,7 @@ void PERF_DEBUG_ATTRS fec_tx_col_op(uint32_t* restrict out_pak, const unaligend_
     }
 }
 
-void fec_tx_col_perf_to_norm(unaligend_fec_int_t* restrict out_pak, const uint32_t* restrict perf_pak, size_t pak_len) {
+void fec_tx_col_perf_to_norm_clmul64(unaligend_fec_int_t* restrict out_pak, const uint32_t* restrict perf_pak, size_t pak_len) {
     size_t j;
     _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
 
@@ -798,12 +784,12 @@ void fec_tx_col_perf_to_norm(unaligend_fec_int_t* restrict out_pak, const uint32
 #define my_mm_shuffle_epi32(x, a, b, c, d) ((u32x4){((u32x4)x)[a], ((u32x4)x)[b], ((u32x4)x)[c], ((u32x4)x)[d]})
 #endif
 
-void fec_tx_init_perf_arr_avx(u16x16* restrict out_pak, size_t pak_len) {
+void fec_tx_init_perf_arr_vec(u16x16* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
 
 #if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
-void PERF_DEBUG_ATTRS fec_tx_col_op_avx(u16x16* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
+void PERF_DEBUG_ATTRS fec_tx_col_op_vec(u16x16* restrict out_pak, const unaligend_fec_int_t* restrict pak, size_t pak_len, fec_int_t a) {
     fec_idx_t i;
 
     u16x16 shifts = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
@@ -818,7 +804,7 @@ void PERF_DEBUG_ATTRS fec_tx_col_op_avx(u16x16* restrict out_pak, const unaligen
 #endif
 
 #if defined(FEC_HAS_128_INT_VEC)
-void fec_tx_col_perf_to_norm_avx(unaligend_fec_int_t* restrict out_pak, const u16x16* restrict perf_pak, size_t pak_len) {
+void fec_tx_col_perf_to_norm_vec(unaligend_fec_int_t* restrict out_pak, const u16x16* restrict perf_pak, size_t pak_len) {
     fec_idx_t i;
 
     u32x8 shifts1 = {0, 2, 4, 6, 8, 10, 12, 14};
@@ -1192,18 +1178,18 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 
     // seems to be bound by L3 cache size for performance
 
-    fec_tx_init_perf_arr(tmp_pak, pak_len);
+    fec_tx_init_perf_arr_clmul64(tmp_pak, pak_len);
     for (i = 0; i < n; i++) {
         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
         const unaligend_fec_int_t* pak = paks[i];
-        fec_tx_col_op(tmp_pak, pak, pak_len, a_i);
+        fec_tx_col_op_clmul64(tmp_pak, pak, pak_len, a_i);
     }
-    fec_tx_col_perf_to_norm(out_pak, tmp_pak, pak_len);
+    fec_tx_col_perf_to_norm_clmul64(out_pak, tmp_pak, pak_len);
     // size_t k;
     
     // for (k = 0; k < pak_len; k += 512*2048U) {
     //     size_t cur_pak_len = MIN(pak_len - k, 512*2048U);
-    //     fec_tx_init_perf_arr(tmp_pak, cur_pak_len);
+    //     fec_tx_init_perf_arr_clmul64(tmp_pak, cur_pak_len);
     //     for (i = 0; i < n; i++) {
     //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
     //         const unaligend_fec_int_t* pak = paks[i];
@@ -1214,20 +1200,20 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //         //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
     //         //     // }
     //         // }
-    //         fec_tx_col_op(tmp_pak, &pak[k], cur_pak_len, a_i);
+    //         fec_tx_col_op_clmul64(tmp_pak, &pak[k], cur_pak_len, a_i);
     //     }
-    //     fec_tx_col_perf_to_norm(&out_pak[k], tmp_pak, cur_pak_len);
+    //     fec_tx_col_perf_to_norm_clmul64(&out_pak[k], tmp_pak, cur_pak_len);
     // }
 #elif defined(FEC_HAS_128_INT_VEC) || defined(FEC_HAS_64_INT_VEC)
     size_t k;
     fec_idx_t m;
 
-    fec_tx_init_perf_arr_avx(tmp_pak, pak_len);
+    fec_tx_init_perf_arr_vec(tmp_pak, pak_len);
     for (i = 0; i < n; i++) {
         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
         const unaligend_fec_int_t* pak = paks[i];
 #if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
-        fec_tx_col_op_avx(tmp_pak, pak, pak_len, a_i);
+        fec_tx_col_op_vec(tmp_pak, pak, pak_len, a_i);
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
         fec_tx_col_op_sse((__m128*)tmp_pak, pak, pak_len, a_i);
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
@@ -1236,7 +1222,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     }
 
 #if defined(FEC_HAS_128_INT_VEC)
-    fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
+    fec_tx_col_perf_to_norm_vec(out_pak, tmp_pak, pak_len);
 #else
     fec_tx_col_perf_to_norm_mmx(out_pak, (const uint16_t*)tmp_pak, pak_len);
 #endif
@@ -1251,7 +1237,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 
     // for (k = 0; k < pak_len; k += ((size_t)1024U*MULT)) {
     //     size_t cur_pak_len = MIN(pak_len - k, ((size_t)1024U*MULT));
-    //     fec_tx_init_perf_arr_avx(tmp_pak, cur_pak_len);
+    //     fec_tx_init_perf_arr_vec(tmp_pak, cur_pak_len);
     //     for (i = 0; i < n; i++) {
     //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
     //         const unaligend_fec_int_t* pak = paks[i];
@@ -1262,9 +1248,9 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //         //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
     //         //     // }
     //         // }
-    //         fec_tx_col_op_avx(tmp_pak, &pak[k], cur_pak_len, a_i);
+    //         fec_tx_col_op_vec(tmp_pak, &pak[k], cur_pak_len, a_i);
     //     }
-    //     fec_tx_col_perf_to_norm_avx(&out_pak[k], tmp_pak, cur_pak_len);
+    //     fec_tx_col_perf_to_norm_vec(&out_pak[k], tmp_pak, cur_pak_len);
     // }
 
 // #ifndef N_BLOCK
@@ -1273,7 +1259,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 //     #define LEN_BLOCK (32*1024 - 4*1024 - 8*N_BLOCK) / (64 + 2*N_BLOCK)
 //     //#define LEN_BLOCK 1024
 
-//     fec_tx_init_perf_arr_avx(tmp_pak, pak_len);
+//     fec_tx_init_perf_arr_vec(tmp_pak, pak_len);
 
 //     for(m = 0; m < n; m += N_BLOCK) {
 //         fec_idx_t cur_n = MIN(n - m, N_BLOCK);
@@ -1297,13 +1283,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 //                 //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
 //                 //     // }
 //                 // }
-//                 fec_tx_col_op_avx(&tmp_pak[k], &pak[k], cur_pak_len, a_i);
+//                 fec_tx_col_op_vec(&tmp_pak[k], &pak[k], cur_pak_len, a_i);
 //             }
             
 //         }
 //     }
 
-//     fec_tx_col_perf_to_norm_avx(out_pak, tmp_pak, pak_len);
+//     fec_tx_col_perf_to_norm_vec(out_pak, tmp_pak, pak_len);
 
 #elif defined(FEC_HAS_64BIT)
     // fec_tx_init_perf_arr_reg64((uint64_t*)tmp_pak, pak_len);
@@ -2092,7 +2078,7 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op(fec_perf_int_t* restrict recovered,
 
 
 #ifdef FEC_HAS_CLMUL64
-static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+static void PERF_DEBUG_ATTRS fec_rx_col_op_clmul64(uint32_t* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     fec_idx_t i;
 
     _poly_t _b = _POLY_INT_TO_POLY(pak_val);
@@ -2121,7 +2107,7 @@ static void PERF_DEBUG_ATTRS __fec_rx_col_op_4(uint32_t* restrict recovered, con
 }
 #endif
 
-static void PERF_DEBUG_ATTRS __fec_rx_col_op_5(u16x16* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
+static void PERF_DEBUG_ATTRS fec_rx_col_op_vec(u16x16* restrict recovered, const fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_int_t* restrict inv_arr, fec_int_t pak_val, fec_int_t pak_xy) {
     fec_idx_t i;
 
     u16x16 shifts = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
@@ -2740,7 +2726,7 @@ void __attribute__((noinline)) __fec_rx_one_op2(fec_idx_t num, fec_int_t* presen
 
     fec_idx_t i,j,k,m;
 
-    fec_int_t prefetch[32];
+    fec_int_t prefetch[64];
 
     u64x2 poly_g = {POLY_G, 0};
 
@@ -2937,15 +2923,6 @@ void __attribute__((noinline)) __attribute__((visibility("default"))) blabla(fec
 
 #endif
 
-#ifndef FEC_USER_GIVEN_BUFFER
-#define _PAK_ARR_PARAMS unaligend_fec_int_t* restrict * restrict y_pak_arr, unaligend_fec_int_t* restrict * restrict x_pak_arr
-#else
-#define _PAK_ARR_PARAMS unaligend_fec_int_t* restrict y_paks_buf, unaligend_fec_int_t* restrict x_pak_arr size_t pak_len
-#endif
-
-void PERF_DEBUG_ATTRS __fec_rx_one_op4(fec_idx_t num_xy, fec_int_t* restrict present_y, _PAK_ARR_PARAMS, uint32_t* restrict tmp_recovered_ints, fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* restrict inv_cache, size_t out_pak_idx, fec_int_t ones_pak_val);
-void PERF_DEBUG_ATTRS __fec_rx_one_op5(fec_idx_t num_xy, fec_int_t* restrict present_y, _PAK_ARR_PARAMS, u16x16* restrict tmp_recovered_ints, fec_int_t* restrict missing_y, fec_idx_t num_y_missing, const fec_inv_cache_t* restrict inv_cache, size_t out_pak_idx, fec_int_t ones_pak_val);
-
 fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_inv_cache_t *inv_cache) {
     fec_idx_t n = rx_state->n;
     size_t pak_len = rx_state->pak_len;
@@ -3013,7 +2990,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #define _GET_X_PAK(idx) (x_pak_arr[(idx)])
 #define _GET_Y_PAK(idx) (y_pak_arr[(idx)])
 #define _GET_XY_PAK(idx) _GET_Y_PAK(idx)
-#define _PAK_ARR_PARAMS unaligend_fec_int_t* restrict * restrict y_pak_arr, unaligend_fec_int_t* restrict * restrict x_pak_arr
 #else
     unaligend_fec_int_t* x_paks_buf = &rx_state->pak_buffer[num_y_present * pak_len];
     unaligend_fec_int_t* y_paks_buf = rx_state->pak_buffer;
@@ -3021,7 +2997,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #define _GET_X_PAK(idx) (&x_paks_buf[(idx)*pak_len])
 #define _GET_Y_PAK(idx) (&y_paks_buf[(idx)*pak_len])
 #define _GET_XY_PAK(idx) _GET_Y_PAK(idx)
-#define _PAK_ARR_PARAMS unaligend_fec_int_t* restrict y_paks_buf, unaligend_fec_int_t* restrict x_pak_arr size_t pak_len
 #endif
 
 #ifdef PERF_DEBUG
@@ -3119,6 +3094,17 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         //     _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
         // }
 
+#if 0
+        for (i = 0; i < num_y_missing; i++) {
+            ((fec_int_t*)tmp_recovered_ints)[i] = ones_pak_ii;
+        }
+
+        __fec_rx_one_op2(num_y_present + num_x_present, present_y, y_pak_arr, (fec_int_t*)tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
+
+        for (i = 0; i < num_y_missing; i++) {
+            _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
+        }
+#else
 #if defined(FEC_HAS_CLMUL64)
         {
             for (i = 0; i < num_y_missing; i++) {
@@ -3128,7 +3114,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
             for (j = 0; j < num_y_present + num_x_present; j++) {
                 fec_int_t xy_j = present_y[j];
                 fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
-                __fec_rx_col_op_4(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+                fec_rx_col_op_clmul64(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
             }
 
             _poly_t _poly = _POLY_INT_TO_POLY(POLY_G);
@@ -3169,7 +3155,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
                 fec_int_t xy_j = present_y[j];
                 fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
 #if defined(FEC_HAS_128_INT_VEC) || (defined(FEC_HAS_64_INT_VEC) && !(defined(__x86_64__) || defined(__i386__)))
-                __fec_rx_col_op_5(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
+                fec_rx_col_op_vec(tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
                 fec_rx_col_op_sse((__m128*)tmp_recovered_ints, missing_y, num_y_missing, inv_arr, xy_pak_arr_j_val, xy_j);
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
@@ -3324,6 +3310,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         for (i = 0; i < num_y_missing; i++) {
             _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
         }
+#endif
 #endif
     }
 
