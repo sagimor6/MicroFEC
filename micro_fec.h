@@ -106,6 +106,7 @@ typedef struct {
 // #undef FEC_HAS_CLMUL64
 // #undef FEC_HAS_CLMUL32
 // #undef FEC_HAS_128_INT_VEC
+// #undef __SSE__
 // #undef FEC_HAS_64_INT_VEC
 // #undef FEC_HAS_64BIT
 // #undef FEC_HAS_32BIT
@@ -116,15 +117,16 @@ typedef uint32_t fec_perf_int_t;
 #if defined(FEC_HAS_128_INT_VEC) || !(defined(__x86_64__) || defined(__i386__))
 typedef uint16_t __attribute__ ((vector_size (32))) fec_perf_int_t;
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__SSE__)
-typedef uint16_t __attribute__ ((vector_size (32))) __attribute__((aligned(16))) fec_perf_int_t;
+typedef uint16_t __attribute__ ((vector_size (16))) __attribute__((aligned(16))) fec_perf_int_t[2];
 #elif (defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)
-typedef uint16_t __attribute__ ((vector_size (32))) __attribute__((aligned(8))) fec_perf_int_t;
+typedef uint16_t __attribute__ ((vector_size (8))) __attribute__((aligned(8))) fec_perf_int_t[4];
 #endif
 #elif defined(FEC_HAS_64BIT)
 typedef uint64_t fec_perf_int_t[4];
 #elif defined(FEC_HAS_32BIT)
 typedef uint32_t fec_perf_int_t[8];
 #else
+#define _FEC_NO_OPT
 typedef uint16_t fec_perf_int_t;
 #endif
 
@@ -139,10 +141,6 @@ typedef struct {
 } fec_tx_state_t;
 
 //#define FEC_USER_GIVEN_BUFFER
-
-// typedef uint16_t __attribute__ ((vector_size (32))) fec_2int_t;
-// typedef uint32_t fec_2int_t;
-// typedef uint16_t fec_2int_t;
 
 typedef struct {
     fec_idx_t n;
