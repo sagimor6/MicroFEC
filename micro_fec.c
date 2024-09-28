@@ -2487,21 +2487,23 @@ fec_int_t PERF_DEBUG_ATTRS __fec_rx_row_op(const unaligend_fec_int_t * const* pa
 #ifdef _WIN32
 #include <realtimeapiset.h>
 #include <processthreadsapi.h>
+#include <profileapi.h>
 static uint64_t get_timestamp() {
-    // struct timespec tp = {0};
-    // //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
-    // clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
-    // return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
-    uint64_t t;
-    QueryThreadCycleTime(GetCurrentThread(), &t);
-    t /= 4;
-    return t;
+    // uint64_t t;
+    // QueryThreadCycleTime(GetCurrentThread(), &t);
+    // t /= 4;
+    // return t;
+
+    uint64_t t, freq;
+    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+    QueryPerformanceCounter((LARGE_INTEGER*)&t);
+    return (uint64_t)(((double)t * 1000000000) / freq);
 }
 #else
 static uint64_t get_timestamp() {
     struct timespec tp = {0};
     //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
     return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
 }
 #endif

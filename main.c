@@ -89,12 +89,18 @@ void rand_fill(void* buf, size_t len) {
 #ifdef _WIN32
 #include <realtimeapiset.h>
 #include <processthreadsapi.h>
+#include <profileapi.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 uint64_t get_timestamp() {
-    uint64_t t;
-    CHECK(QueryThreadCycleTime(GetCurrentThread(), &t));
-    t /= 4;
+    // uint64_t t;
+    // CHECK(QueryThreadCycleTime(GetCurrentThread(), &t));
+    // t /= 4;
+
+    uint64_t t, freq;
+    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+    QueryPerformanceCounter((LARGE_INTEGER*)&t);
+    return (uint64_t)(((double)t * 1000000000) / freq);
 cleanup:
     return t;
 }
@@ -103,7 +109,7 @@ cleanup:
 uint64_t get_timestamp() {
     struct timespec tp = {0};
     //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
-    CHECK(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp) == 0);
+    CHECK(clock_gettime(CLOCK_MONOTONIC_RAW, &tp) == 0);
 
 cleanup:
     return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
