@@ -45,7 +45,7 @@
 #endif
 
 #ifndef _POLY_VEC_SHIFT
-#define _POLY_VEC_SHIFT(poly_val, shift) (((poly_val) >> (shift)) & (~((1ULL << 32) - (1ULL (32 - (shift))))))
+#define _POLY_VEC_SHIFT(poly_val, shift) (((poly_val) >> (shift)) & (~((1ULL << 32) - (1ULL << (32 - (shift))))))
 #endif
 
 #endif

@@ -8,7 +8,7 @@
 void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_TYPE len) {
     LEN_PARAM_TYPE i;
     union {
-        fec_int_t val_arr[sizeof(fec_perf_int_t)/sizeof(fec_int_t)];
+        fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
         fec_perf_int_t vec_val;
     } vec_val = {.val_arr = {
 #if defined (FEC_HAS_CLMUL32) || defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
@@ -270,7 +270,7 @@ static inline void NORM_FUNC_NAME(const fec_perf_int_t* restrict perf_col, LEN_P
         u32x8 res2 = (((u32x8)res) >> 16) << shifts2;
 
         u32x8 res3 = res1 ^ res2;
-        u32x4 res4 = (u32x4)(my_mm256_extracti128_si256((__m256i)res3, 0) ^ my_mm256_extracti128_si256((__m256i)res3, 1));
+        u32x4 res4 = (u32x4)(my_mm256_extracti128_si256(res3, 0) ^ my_mm256_extracti128_si256(res3, 1));
         u32x4 res5 = res4 ^ my_mm_shuffle_epi32(res4, 1, 2, 3, 0);
         u32x4 res6 = res5 ^ my_mm_shuffle_epi32(res5, 2, 3, 0, 1); // res6 holds in each cell the int32 res
 

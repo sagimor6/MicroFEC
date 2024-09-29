@@ -56,15 +56,15 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #endif
 
 #if defined(__AVX2__)
-#define my_mm256_extracti128_si256 _mm256_extracti128_si256
+#define my_mm256_extracti128_si256(x, y) _mm256_extracti128_si256((__m256i)x, y)
 #elif defined(__AVX__)
-#define my_mm256_extracti128_si256 _mm256_extractf128_si256
+#define my_mm256_extracti128_si256(x, y) _mm256_extractf128_si256((__m256i)x, y)
 #else
 #define my_mm256_extracti128_si256(x, y) ((u64x2){((u64x4)x)[y*2+0], ((u64x4)x)[y*2+1]})
 #endif
 
 #if defined(__SSE2__)
-#define my_mm_shuffle_epi32(x, a, b, c, d) _mm_shuffle_epi32(x, _MM_SHUFFLE(d, c, b, a))
+#define my_mm_shuffle_epi32(x, a, b, c, d) ((u32x4)_mm_shuffle_epi32((__m128i)x, _MM_SHUFFLE(d, c, b, a)))
 #elif defined(__SSE__)
 #define my_mm_shuffle_epi32(x, a, b, c, d) ((u32x4)_mm_shuffle_ps(x, x, _MM_SHUFFLE(d, c, b, a)))
 #else
