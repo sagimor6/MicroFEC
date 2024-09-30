@@ -1,3 +1,6 @@
+Copyright (C) 2024, Sagi Mor (sagimor6@gmail.com). All rights reserved.  
+
+[MicroFEC](https://github.com/sagimor6/MicroFEC)  
 A small FEC (Forward Error Correction) library, which uses minimal amount of memory.  
   
 suppose:  
