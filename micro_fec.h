@@ -173,7 +173,11 @@ typedef struct {
 
 #ifdef FEC_MIN_MEM
     // min mem uses this:
+#ifdef FEC_LARGE_K
     fec_perf_int_t *tmp_recovered_ints; // size = k
+#else
+    fec_int_t *tmp_recovered_ints; // size = k
+#endif
 #else
     // regular uses this:
     fec_int_t *pi_xy_div_xx; // size = k - 1

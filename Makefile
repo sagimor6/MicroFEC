@@ -15,7 +15,7 @@ DEBUG_CFLAGS += -g
 OPT_CFLAGS += -ffunction-sections -fdata-sections -O3 -fvisibility=hidden
 OPT_CFLAGS += -falign-loops=32
 OPT_CFLAGS += -mbranches-within-32B-boundaries
-#OPT_CFLAGS += -Wa,mbranches-within-32B-boundaries
+#OPT_CFLAGS += -Wa,-mbranches-within-32B-boundaries
 OPT_CFLAGS += -march=skylake
 OPT_LDFLAGS = -Wl,--gc-sections
 
