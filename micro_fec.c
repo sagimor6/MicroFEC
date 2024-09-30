@@ -559,10 +559,6 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
         return FEC_STATUS_SUCCESS;
     }
 
-    // for (j = 0; j < pak_len; j++) {
-    //     out_pak[j] = rand();
-    // }
-
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPTS)
     fec_tx_init_perf_arr(tmp_pak, pak_len);
     for (i = 0; i < n; i++) {
@@ -588,146 +584,6 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
             // }
         }
     }
-#endif
-
-#if defined(FEC_HAS_CLMUL64)
-
-    // seems to be bound by L3 cache size for performance
-
-    // size_t k;
-    
-    // for (k = 0; k < pak_len; k += 512*2048U) {
-    //     size_t cur_pak_len = MIN(pak_len - k, 512*2048U);
-    //     fec_tx_init_perf_arr_clmul64(tmp_pak, cur_pak_len);
-    //     for (i = 0; i < n; i++) {
-    //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-    //         const unaligend_fec_int_t* pak = paks[i];
-    //         // for (j = 0; j < pak_len; j++) {
-    //         //     // if (idx == 0) {
-    //         //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-    //         //     // } else {
-    //         //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-    //         //     // }
-    //         // }
-    //         fec_tx_col_op_clmul64(tmp_pak, &pak[k], cur_pak_len, a_i);
-    //     }
-    //     fec_tx_col_perf_to_norm_clmul64(&out_pak[k], tmp_pak, cur_pak_len);
-    // }
-#elif defined(FEC_HAS_CLMUL32)
-#elif defined(FEC_HAS_128_INT_VEC) || defined(FEC_HAS_64_INT_VEC)
-    // size_t k;
-    // fec_idx_t m;
-
-    // // seems to be bound by L2 cache size for performance
-    
-    // #define MULT 6
-
-    // for (k = 0; k < pak_len; k += ((size_t)1024U*MULT)) {
-    //     size_t cur_pak_len = MIN(pak_len - k, ((size_t)1024U*MULT));
-    //     fec_tx_init_perf_arr_vec(tmp_pak, cur_pak_len);
-    //     for (i = 0; i < n; i++) {
-    //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-    //         const unaligend_fec_int_t* pak = paks[i];
-    //         // for (j = 0; j < pak_len; j++) {
-    //         //     // if (idx == 0) {
-    //         //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-    //         //     // } else {
-    //         //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-    //         //     // }
-    //         // }
-    //         fec_tx_col_op_vec(tmp_pak, &pak[k], cur_pak_len, a_i);
-    //     }
-    //     fec_tx_col_perf_to_norm_vec(&out_pak[k], tmp_pak, cur_pak_len);
-    // }
-
-// #ifndef N_BLOCK
-//     #define N_BLOCK 1
-// #endif
-//     #define LEN_BLOCK (32*1024 - 4*1024 - 8*N_BLOCK) / (64 + 2*N_BLOCK)
-//     //#define LEN_BLOCK 1024
-
-//     fec_tx_init_perf_arr_vec(tmp_pak, pak_len);
-
-//     for(m = 0; m < n; m += N_BLOCK) {
-//         fec_idx_t cur_n = MIN(n - m, N_BLOCK);
-
-//         for (k = 0; k < pak_len; k += LEN_BLOCK) {
-
-//             // size_t ii;
-//             // for (ii = 0; ii < LEN_BLOCK * sizeof(tmp_pak[0]); ii += 0x40) {
-//             //     _mm_prefetch(((char*)&tmp_pak[k + LEN_BLOCK]) + ii, _MM_HINT_ET0);
-//             // }
-            
-//             size_t cur_pak_len = MIN(pak_len - k, LEN_BLOCK);
-            
-//             for (i = 0; i < cur_n; i++) {
-//                 fec_int_t a_i = inv_arr[poly_add(n + idx - 1, m + i)];
-//                 const unaligend_fec_int_t* pak = paks[m + i];
-//                 // for (j = 0; j < pak_len; j++) {
-//                 //     // if (idx == 0) {
-//                 //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-//                 //     // } else {
-//                 //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-//                 //     // }
-//                 // }
-//                 fec_tx_col_op_vec(&tmp_pak[k], &pak[k], cur_pak_len, a_i);
-//             }
-            
-//         }
-//     }
-
-//     fec_tx_col_perf_to_norm_vec(out_pak, tmp_pak, pak_len);
-
-#elif defined(FEC_HAS_64BIT)
-
-    // size_t k;
-
-    // // 64-90 is also sweet spot
-    // // but seems like L3 bound
-    
-    // for (k = 0; k < pak_len; k += 8*1024U) {
-    //     size_t cur_pak_len = MIN(pak_len - k, 8*1024U);
-    //     fec_tx_init_perf_arr_reg64((uint64_t*)tmp_pak, cur_pak_len);
-    //     for (i = 0; i < n; i++) {
-    //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-    //         const unaligend_fec_int_t* pak = paks[i];
-    //         // for (j = 0; j < pak_len; j++) {
-    //         //     // if (idx == 0) {
-    //         //     //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-    //         //     // } else {
-    //         //         out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-    //         //     // }
-    //         // }
-    //         fec_tx_col_op_reg64((uint64_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
-    //     }
-    //     fec_tx_col_perf_to_norm_reg64(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
-    // }
-#elif defined(FEC_HAS_32BIT)
-
-    // size_t k;
-    
-    // for (k = 0; k < pak_len; k += 8*1024U) {
-    //     size_t cur_pak_len = MIN(pak_len - k, 8*1024U);
-    //     fec_tx_init_perf_arr_reg32((uint32_t*)tmp_pak, cur_pak_len);
-    //     for (i = 0; i < n; i++) {
-    //         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-    //         const unaligend_fec_int_t* pak = paks[i];
-    //         fec_tx_col_op_reg32((uint32_t*)tmp_pak, &pak[k], cur_pak_len, a_i);
-    //     }
-    //     fec_tx_col_perf_to_norm_reg32(&out_pak[k], (const uint16_t*)tmp_pak, cur_pak_len);
-    // }
-#else
-    // for (i = 0; i < n; i++) {
-    //     fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
-    //     const unaligend_fec_int_t* pak = paks[i];
-    //     for (j = 0; j < pak_len; j++) {
-    //         // if (idx == 0) {
-    //         //     out_pak[j] = poly_add(out_pak[j], pak[j]);
-    //         // } else {
-    //             out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
-    //         // }
-    //     }
-    // }
 #endif
 
     return FEC_STATUS_SUCCESS;
@@ -1443,17 +1299,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         //     _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
         // }
 
-#if 0
-        for (i = 0; i < num_y_missing; i++) {
-            ((fec_int_t*)tmp_recovered_ints)[i] = ones_pak_ii;
-        }
 
-        __fec_rx_one_op2(num_y_present + num_x_present, present_y, y_pak_arr, (fec_int_t*)tmp_recovered_ints, missing_y, num_y_missing, inv_cache, ii);
-
-        for (i = 0; i < num_y_missing; i++) {
-            _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
-        }
-#else
 #if !defined(_FEC_NO_OPT)
     fec_rx_col_init(tmp_recovered_ints, ones_pak_ii, num_y_missing);
 
@@ -1480,7 +1326,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     for (i = 0; i < num_y_missing; i++) {
         _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
     }
-#endif
 #endif
     }
 
@@ -1541,16 +1386,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     printf("---1.6--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
 #endif
-
-    // {
-    //     uint16_t aaa = rand();
-    //     uint16_t bbb = rand();
-    //     for(i = 0; i < n*pak_len*num_y_missing; i++) {
-    //         aaa = poly_mul(aaa, bbb);
-    //         bbb = aaa ^ bbb;
-    //     }
-    //     printf("---%d---\n", aaa);
-    // }
 
     for (i = 0; i < num_y_missing; i++) {
         present_x[i] = missing_y[i];
