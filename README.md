@@ -8,7 +8,7 @@ k = number of info packets lost in the transmission.
   
 structs:  
 fec_inv_cache_t - serves as cache for inverses. O(N + K) space.  
-fec_tx_state_t - O(N) space.  
+fec_tx_state_t - O(N) space, with perf its O(N + L).  
 fec_rx_state_t - O(N + K) space.  
   
 functions:  
