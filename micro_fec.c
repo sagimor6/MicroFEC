@@ -49,6 +49,27 @@ static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
     _c ^= _d;
     
     return _POLY_EXTRACT(_c, uint16_t, 0);
+#elif defined(FEC_HAS_32BIT)
+    size_t i;
+    uint32_t res = 0;
+
+    for (i = 0; i < sizeof(fec_int_t)*8; i++) {
+        res ^= (((uint32_t)a) << i) & (-(uint32_t)(b & 1));
+        b >>= 1;
+    }
+
+    uint16_t res2 = res;
+    uint32_t carry = res >> 16;
+
+    carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+    res2 ^= carry;
+
+    carry = carry >> 16;
+    
+    res2 ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5);
+
+    return res2;
 #else
     size_t i;
     fec_int_t res = 0;
