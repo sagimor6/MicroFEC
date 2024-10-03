@@ -468,11 +468,12 @@ fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) 
 
 #endif
 
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
+
 void fec_tx_init_perf_arr(fec_perf_int_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
 
-#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
 #define LEN_PARAM_TYPE size_t
 #define INPUT_ARGS const unaligend_fec_int_t* restrict pak
 #define READ_INPUT(j) pak[j]
@@ -555,7 +556,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
         return FEC_STATUS_SUCCESS;
     }
 
-#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPTS)
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
     fec_tx_init_perf_arr(tmp_pak, pak_len);
     for (i = 0; i < n; i++) {
         fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
@@ -1071,7 +1072,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #define _NORM_FMA_PARAMS x_paks_buf, pak_len
 #endif
 
-#ifndef _FEC_NO_OPT
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
 #define LEN_PARAM_TYPE fec_idx_t
 #define INPUT_ARGS const fec_int_t* restrict missing_y, const fec_int_t* restrict inv_arr, fec_int_t pak_xy
 #define READ_INPUT(j) inv_arr[poly_add(pak_xy, missing_y[j])]
@@ -1266,8 +1267,12 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     start_time = get_timestamp();
 #endif
 
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
     const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
+#else
+    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+#endif    
 
     for (ii = 0; ii < pak_len; ii++) {
         
@@ -1296,7 +1301,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         // }
 
 
-#if !defined(_FEC_NO_OPT)
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_rx_col_init(tmp_recovered_ints, ones_pak_ii, num_y_missing);
 
     for (j = 0; j < num_y_present + num_x_present; j++) {

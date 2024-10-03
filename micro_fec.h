@@ -126,8 +126,9 @@ typedef uint64_t fec_perf_int_t[4];
 #elif defined(FEC_HAS_32BIT)
 typedef uint32_t fec_perf_int_t[8];
 #else
+#ifndef _FEC_NO_OPT
 #define _FEC_NO_OPT
-typedef uint16_t fec_perf_int_t;
+#endif
 #endif
 
 typedef struct {
@@ -173,7 +174,7 @@ typedef struct {
 
 #ifdef FEC_MIN_MEM
     // min mem uses this:
-#ifdef FEC_LARGE_K
+#if defined(FEC_LARGE_K) && !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t *tmp_recovered_ints; // size = k
 #else
     fec_int_t *tmp_recovered_ints; // size = k
