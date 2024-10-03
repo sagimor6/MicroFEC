@@ -5,7 +5,7 @@
 #include "dummy_defs.h"
 
 #if INIT_FUNC_NAME != -1
-void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_TYPE len) {
+static void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_TYPE len) {
     LEN_PARAM_TYPE i;
     union {
         fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
@@ -14,7 +14,7 @@ void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_
 #if defined (FEC_HAS_CLMUL32) || defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
         [0] = val
 #else
-        [15] = val
+        [(sizeof(fec_perf_int_t)/(sizeof(fec_int_t))) - 1] = val
 #endif
     }};
     for(i = 0; i < len; i++) {
@@ -23,7 +23,8 @@ void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_
 }
 #endif
 
-void PERF_DEBUG_ATTRS FMA_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len, fec_int_t a, INPUT_ARGS) {
+// TODO: __attribute__((noinline)) in sse2 and down improves performance. understand why this happens?
+static void __attribute__((hot)) __attribute__((noinline)) PERF_DEBUG_ATTRS FMA_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len, fec_int_t a, INPUT_ARGS) {
     LEN_PARAM_TYPE i;
 
 #if defined(FEC_HAS_CLMUL64)

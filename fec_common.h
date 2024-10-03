@@ -5,7 +5,7 @@
 
 #include "micro_fec.h"
 
-#ifdef PERF_DEBUG
+#if defined(PERF_DEBUG)
 #define PERF_DEBUG_ATTRS __attribute__((noinline)) __attribute__((aligned(16)))
 #else
 #define PERF_DEBUG_ATTRS 

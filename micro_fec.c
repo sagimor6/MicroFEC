@@ -6,14 +6,40 @@
 #include <string.h>
 #include <malloc.h>
 
-#define PERF_DEBUG 
 #ifdef PERF_DEBUG
-#include <time.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <realtimeapiset.h>
+#include <processthreadsapi.h>
+#include <profileapi.h>
+#else
+#include <time.h>
+#endif
 #endif
 
 #include "micro_fec.h"
 #include "fec_common.h"
+
+#ifdef PERF_DEBUG
+static uint64_t get_timestamp() {
+#ifdef _WIN32
+    // uint64_t t;
+    // QueryThreadCycleTime(GetCurrentThread(), &t);
+    // t /= 4;
+    // return t;
+
+    uint64_t t, freq;
+    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+    QueryPerformanceCounter((LARGE_INTEGER*)&t);
+    return (uint64_t)(((double)t * 1000000000) / freq);
+#else
+    struct timespec tp = {0};
+    //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
+    return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
+#endif
+}
+#endif
 
 // num must be > 0
 static unsigned int log2_ceil(unsigned int num) {
@@ -470,7 +496,7 @@ fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) 
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
 
-void fec_tx_init_perf_arr(fec_perf_int_t* restrict out_pak, size_t pak_len) {
+static void fec_tx_init_perf_arr(fec_perf_int_t* restrict out_pak, size_t pak_len) {
     memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
 }
 
@@ -1068,7 +1094,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #define _GET_X_PAK(idx) (&x_paks_buf[(idx)*pak_len])
 #define _GET_Y_PAK(idx) (&y_paks_buf[(idx)*pak_len])
 #define _GET_XY_PAK(idx) _GET_Y_PAK(idx)
-#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t** x_paks_buf, size_t pak_len
+#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t* x_paks_buf, size_t pak_len
 #define _NORM_FMA_PARAMS x_paks_buf, pak_len
 #endif
 
@@ -1090,32 +1116,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #undef READ_INPUT
 #undef OUTPUT_ARGS
 #undef WRITE_OUTPUT
-#endif
-
-#ifdef PERF_DEBUG
-#ifdef _WIN32
-#include <realtimeapiset.h>
-#include <processthreadsapi.h>
-#include <profileapi.h>
-static uint64_t get_timestamp() {
-    // uint64_t t;
-    // QueryThreadCycleTime(GetCurrentThread(), &t);
-    // t /= 4;
-    // return t;
-
-    uint64_t t, freq;
-    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
-    QueryPerformanceCounter((LARGE_INTEGER*)&t);
-    return (uint64_t)(((double)t * 1000000000) / freq);
-}
-#else
-static uint64_t get_timestamp() {
-    struct timespec tp = {0};
-    //CHECK(clock_gettime(CLOCK_MONOTONIC, &tp) == 0);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
-    return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
-}
-#endif
 #endif
 
 #ifdef FEC_USER_GIVEN_BUFFER
