@@ -492,10 +492,6 @@ void fec_tx_init_perf_arr(fec_perf_int_t* restrict out_pak, size_t pak_len) {
 #undef WRITE_OUTPUT
 #endif
 
-void fec_tx_init_perf_arr_vec(u16x16* restrict out_pak, size_t pak_len) {
-    memset(out_pak, 0, pak_len*sizeof(out_pak[0]));
-}
-
 // TODO: idx can be fec_int_t
 fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak) {
     fec_idx_t n = tx_state->n;

@@ -29,7 +29,7 @@
 
 #define POLY_G ((fec_int_t)0b0000000000101011)
 
-#if defined(FEC_HAS_64_INT_VEC) || defined (FEC_HAS_CLMUL32) || 1
+#if defined(FEC_HAS_64_INT_VEC) || defined (FEC_HAS_CLMUL32)
 
 typedef uint8_t u8x16 __attribute__ ((vector_size (16)));
 typedef uint16_t u16x8 __attribute__ ((vector_size (16)));
