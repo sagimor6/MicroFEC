@@ -131,9 +131,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     bool inited_rx_state = false;
     fec_rx_state_t rx_state;
     uint64_t start_time, end_time;
-#ifdef FEC_USER_GIVEN_BUFFER
     fec_int_t *rx_dest_buf = NULL;
-#endif
 
 #ifdef _WIN32
     // we want accuracy
@@ -163,10 +161,8 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     r_paks = malloc(k * pak_len * sizeof(uint16_t));;
     CHECK(r_paks != NULL);
 
-#ifdef FEC_USER_GIVEN_BUFFER
     rx_dest_buf = malloc(n * pak_len * sizeof(uint16_t));
     CHECK(rx_dest_buf != NULL);
-#endif
 
     srand(1337/*time(NULL)*/);
 
@@ -180,6 +176,10 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
             paks[i] = i;
         }
     }
+
+#ifndef FEC_USER_GIVEN_BUFFER
+    memcpy(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t));
+#endif
 
     TRACE("--0--\n");
     start_time = get_timestamp();
@@ -255,10 +255,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 #ifndef FEC_USER_GIVEN_BUFFER
     uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
     for (i = 0; i < n; i++) {
-        if (res[i] == &paks[i*pak_len]) {
-            continue;
-        }
-        CHECK(memcmp(res[i], &paks[i*pak_len], pak_len * sizeof(uint16_t)) == 0);
+        CHECK(memcmp(res[i], &rx_dest_buf[i*pak_len], pak_len * sizeof(uint16_t)) == 0);
     }
 #else
     CHECK(memcmp(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t)) == 0);
@@ -274,11 +271,9 @@ cleanup:
     if (rcv_idxs != NULL) {
         free(rcv_idxs);
     }
-#ifdef FEC_USER_GIVEN_BUFFER
     if (rx_dest_buf != NULL) {
         free(rx_dest_buf);
     }
-#endif
 
     if (inited_rx_state) {
         fec_rx_destroy(&rx_state);
