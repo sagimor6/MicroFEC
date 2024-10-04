@@ -47,7 +47,7 @@ static uint64_t get_timestamp() {
 
 
 #ifdef FEC_DO_ENDIAN_SWAP
-#define fec_bswap(x) bswap_16(x)
+#define fec_bswap(x) (bswap_16(x))
 #else
 #define fec_bswap(x) (x)
 #endif
@@ -612,9 +612,9 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     //     out_pak[j] = res;
     // }
 
-    memset(out_pak, 0, pak_len*sizeof(fec_int_t));
-
     if (idx == 0) {
+        memset(out_pak, 0, pak_len*sizeof(fec_int_t));
+
         for (i = 0; i < n; i++) {
             const unaligend_fec_int_t* pak = paks[i];
             for (j = 0; j < pak_len; j++) {
@@ -643,6 +643,8 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #endif
 
 #else
+    memset(out_pak, 0, pak_len*sizeof(fec_int_t));
+
     for (i = 0; i < n; i++) {
         fec_int_t a_i = _fec_inv(inv_cache, poly_add(n + idx - 1, i));
         const unaligend_fec_int_t* pak = paks[i];
@@ -653,10 +655,10 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
                 out_pak[j] = poly_add(out_pak[j], poly_mul(fec_bswap(pak[j]), a_i));
             // }
         }
-#if defined(FEC_DO_ENDIAN_SWAP)
-        mem_bswap(out_pak, pak_len);
-#endif
     }
+#if defined(FEC_DO_ENDIAN_SWAP)
+    mem_bswap(out_pak, pak_len);
+#endif
 #endif
 
     return FEC_STATUS_SUCCESS;
@@ -697,6 +699,20 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     if (num_y_missing >= has_one_row) {
         num_x_present = num_y_missing - has_one_row;
     }
+
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        if(rx_state->info_paks[i] != NULL) {
+            mem_bswap(rx_state->info_paks[i], pak_len);
+        }
+    }
+    if (rx_state->redundancy_paks[0] != NULL) {
+        mem_bswap(rx_state->redundancy_paks[0], pak_len);
+    }
+    for (i = 0; i < num_x_present; i++) {
+        mem_bswap(rx_state->redundancy_paks[rx_state->present_x[i] - n + 1], pak_len);
+    }
+#endif
 
     for (y_i = 0, i = 0, j = 0; y_i < n; y_i++) {
         if (rx_state->info_paks[y_i] != NULL) {
@@ -808,6 +824,12 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
     }
 
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        mem_bswap(rx_state->info_paks[i], pak_len);
+    }
+#endif
+
     return FEC_STATUS_SUCCESS;
 }
 
@@ -845,6 +867,18 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
     has_one_row = (rx_state->ones_pak != NULL);
     num_x_present = num_y_missing - has_one_row;
+
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < rx_state->num_info; i++) {
+        mem_bswap(rx_state->pak_arr[i], pak_len);
+    }
+    for (i = 0; i < num_x_present; i++) {
+        mem_bswap(rx_state->pak_arr[n - num_x_present + i], pak_len);
+    }
+    if (rx_state->ones_pak != NULL) {
+        mem_bswap(rx_state->ones_pak, pak_len);
+    }
+#endif
 
     present_x = &rx_state->pak_xy_arr[n - num_x_present];
 
@@ -945,6 +979,12 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         rx_state->pak_xy_arr[n - num_x_present + i] = rx_state->missing_y[i + has_one_row];
     }
 
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        mem_bswap(rx_state->pak_arr[i], pak_len);
+    }
+#endif
+
     for (i = 0; i < n; i++) {
         while (rx_state->pak_xy_arr[i] != i) {
             fec_int_t idx = rx_state->pak_xy_arr[i];
@@ -1007,6 +1047,20 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     if (num_y_missing >= has_one_row) {
         num_x_present = num_y_missing - has_one_row;
     }
+
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        if(rx_state->info_paks[i] != NULL) {
+            mem_bswap(rx_state->info_paks[i], pak_len);
+        }
+    }
+    if (rx_state->redundancy_paks[0] != NULL) {
+        mem_bswap(rx_state->redundancy_paks[0], pak_len);
+    }
+    for (i = 0; i < num_x_present; i++) {
+        mem_bswap(rx_state->redundancy_paks[rx_state->present_x[i] - n + 1], pak_len);
+    }
+#endif
 
     for (y_i = 0, i = 0; i < num_y_missing; y_i++) {
         if (rx_state->info_paks[y_i] == NULL) {
@@ -1128,6 +1182,12 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     for (i = 0; i < num_x_present; i++) {
         rx_state->info_paks[rx_state->missing_y[i + has_one_row]] = rx_state->redundancy_paks[rx_state->present_x[i] - n + 1];
     }
+
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        mem_bswap(rx_state->info_paks[i], pak_len);
+    }
+#endif
 
     return FEC_STATUS_SUCCESS;
 }
