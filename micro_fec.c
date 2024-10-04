@@ -619,6 +619,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
             const unaligend_fec_int_t* pak = paks[i];
             for (j = 0; j < pak_len; j++) {
                 out_pak[j] = poly_add(out_pak[j], pak[j]);
+                // we don't need endian swap here because bswap(bswap(a)^bswap(b)) = a^b
             }
         }
         return FEC_STATUS_SUCCESS;
@@ -649,9 +650,12 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
             // if (idx == 0) {
             //     out_pak[j] = poly_add(out_pak[j], pak[j]);
             // } else {
-                out_pak[j] = poly_add(out_pak[j], poly_mul(pak[j], a_i));
+                out_pak[j] = poly_add(out_pak[j], poly_mul(fec_bswap(pak[j]), a_i));
             // }
         }
+#if defined(FEC_DO_ENDIAN_SWAP)
+        mem_bswap(out_pak, pak_len);
+#endif
     }
 #endif
 
