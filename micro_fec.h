@@ -17,6 +17,8 @@ typedef uint32_t fec_idx_t;
 
 #define FEC_LARGE_K
 #define FEC_MIN_MEM
+//#define FEC_USER_GIVEN_BUFFER
+//#define FEC_DO_ENDIAN_SWAP
 
 typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
 

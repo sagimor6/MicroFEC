@@ -20,6 +20,10 @@
 #include "micro_fec.h"
 #include "fec_common.h"
 
+#ifdef FEC_DO_ENDIAN_SWAP
+#include <byteswap.h>
+#endif
+
 #ifdef PERF_DEBUG
 static uint64_t get_timestamp() {
 #ifdef _WIN32
@@ -39,6 +43,13 @@ static uint64_t get_timestamp() {
     return (tp.tv_sec*1000000000ULL) + tp.tv_nsec;
 #endif
 }
+#endif
+
+
+#ifdef FEC_DO_ENDIAN_SWAP
+#define fec_bswap(x) bswap_16(x)
+#else
+#define fec_bswap(x) (x)
 #endif
 
 // num must be > 0
@@ -128,6 +139,33 @@ static fec_int_t poly_inv(fec_int_t a) {
     fec_int_t res = poly_pow(a, (fec_int_t)-2);
     return res;
 }
+
+#ifdef FEC_DO_ENDIAN_SWAP
+static void PERF_DEBUG_ATTRS mem_bswap(unaligend_fec_int_t* arr, size_t size) {
+    // TODO: i am hoping compiler will optimize this
+
+    size_t i;
+    for (i = 0; i < size; i++) {
+        fec_int_t val = arr[i];
+        arr[i] = bswap_16(val);
+    }
+}
+#endif
+
+// TODO: decided not to copy in reverse endian at user given buffer at fec_rx_add_pak
+
+// #ifdef FEC_USER_GIVEN_BUFFER
+// static void PERF_DEBUG_ATTRS fec_memcpy_bswap(unaligend_fec_int_t* dst, const unaligend_fec_int_t* src, size_t size) {
+// #ifdef FEC_DO_ENDIAN_SWAP
+//     size_t i;
+//     for (i = 0; i < size; i++) {
+//         dst[i] = bswap_16(src[i]);
+//     }
+// #else
+//     memcpy(dst, src, size * sizeof(fec_int_t));
+// #endif
+// }
+// #endif
 
 static inline fec_int_t _fec_inv(const fec_inv_cache_t *inv_cache, fec_int_t a) {
     return inv_cache->inv_arr[a - 1];
@@ -502,9 +540,13 @@ static void fec_tx_init_perf_arr(fec_perf_int_t* restrict out_pak, size_t pak_le
 
 #define LEN_PARAM_TYPE size_t
 #define INPUT_ARGS const unaligend_fec_int_t* restrict pak
+#if defined(FEC_DO_ENDIAN_SWAP) && defined(FEC_HAS_CLMUL32)
+#define READ_INPUT(j) bswap_16(pak[j])
+#else
 #define READ_INPUT(j) pak[j]
+#endif
 #define OUTPUT_ARGS unaligend_fec_int_t* restrict out_pak
-#define WRITE_OUTPUT(j, val) out_pak[j] = val
+#define WRITE_OUTPUT(j, val) out_pak[j] = fec_bswap(val)
 #define INIT_FUNC_NAME -1
 #define FMA_FUNC_NAME fec_tx_col_op
 #define NORM_FUNC_NAME fec_tx_col_perf_to_norm
@@ -589,6 +631,10 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
         const unaligend_fec_int_t* pak = paks[i];
         fec_tx_col_op(tmp_pak, pak_len, a_i, pak);
     }
+#if defined(FEC_DO_ENDIAN_SWAP) && !defined(FEC_HAS_CLMUL32)
+    // before normalizing, bswap(a)*b = bswap(a*b), bswap(a^b) = bswap(a)^bswap(b)
+    mem_bswap((fec_int_t*)tmp_pak, (sizeof(tmp_pak[0])/(sizeof(fec_int_t))) * pak_len);
+#endif
     fec_tx_col_perf_to_norm(tmp_pak, pak_len, out_pak);
 
 #if !defined(FEC_HAS_128_INT_VEC) && defined(FEC_HAS_64_INT_VEC) && (defined(__x86_64__) || defined(__i386__))
@@ -1175,7 +1221,11 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         }
         rx_state->pak_arr[n - 1] = rx_state->ones_pak;
     }
-
+#ifdef FEC_DO_ENDIAN_SWAP
+    for (i = 0; i < n; i++) {
+        mem_bswap(rx_state->pak_arr[i], pak_len);
+    }
+#endif
 #else
     has_one_row = rx_state->has_one_pak;
     num_x_present = num_y_missing - has_one_row;
@@ -1185,6 +1235,9 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         rx_state->pak_xy_arr[n - 1 - rx_state->ones_pak_idx] = rx_state->pak_xy_arr[n - 1];
         //rx_state->ones_pak_idx = 0;
     }
+#ifdef FEC_DO_ENDIAN_SWAP
+    mem_bswap(rx_state->pak_buffer, n * pak_len);
+#endif
 #endif
 
     present_x = &rx_state->pak_xy_arr[num_y_present];
@@ -1396,6 +1449,16 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     end_time = get_timestamp();
     printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
     start_time = get_timestamp();
+#endif
+
+#ifdef FEC_DO_ENDIAN_SWAP
+#ifndef FEC_USER_GIVEN_BUFFER
+    for (i = 0; i < n; i++) {
+        mem_bswap(y_pak_arr[i], pak_len);
+    }
+#else
+    mem_bswap(y_paks_buf, n * pak_len);
+#endif
 #endif
 
 reorder_packets:
