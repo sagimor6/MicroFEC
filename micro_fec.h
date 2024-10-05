@@ -11,12 +11,8 @@ typedef uint32_t fec_idx_t;
 #ifdef FEC_MIN_MEM
 #undef FEC_MIN_MEM
 #endif
-#ifdef FEC_LARGE_K
-#undef FEC_LARGE_K
-#endif
 
-#define FEC_LARGE_K
-#define FEC_MIN_MEM
+//#define FEC_MIN_MEM
 //#define FEC_USER_GIVEN_BUFFER
 //#define FEC_DO_ENDIAN_SWAP
 
@@ -139,7 +135,7 @@ typedef struct {
 
     const unaligend_fec_int_t** paks; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    fec_perf_int_t* tmp_pak;
+    fec_perf_int_t* tmp_pak; // size = L
 #endif
 } fec_tx_state_t;
 
@@ -152,11 +148,6 @@ typedef struct {
 
     fec_int_t max_x; // maximum k - 1
 
-#ifndef FEC_LARGE_K
-    unaligend_fec_int_t** info_paks; // size = n
-    unaligend_fec_int_t** redundancy_paks; // size = real k
-    fec_int_t *present_x; // size = k - 1
-#else
     uint8_t* received_paks_bitmap; // size = (n + real k)/8
 #ifndef FEC_USER_GIVEN_BUFFER
     unaligend_fec_int_t** pak_arr; // size = n
@@ -168,30 +159,20 @@ typedef struct {
     // TODO: we also have this info from the bitfield
 #endif
     fec_int_t *pak_xy_arr; // size = n
-#endif
     fec_idx_t num_info;
     fec_idx_t num_redundant;
 
     fec_int_t *missing_y; // size = k
 
 #ifdef FEC_MIN_MEM
-    // min mem uses this:
-#if defined(FEC_LARGE_K) && !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t *tmp_recovered_ints; // size = k
 #else
     fec_int_t *tmp_recovered_ints; // size = k
 #endif
 #else
-    // regular uses this:
-    fec_int_t *pi_xy_div_xx; // size = k - 1
-    fec_int_t *pi_yx_div_yy; // size = k
-
-    fec_int_t *present_y; // size = n - 1
-
-    fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - 1
-
-    fec_int_t *tmp_vec_info; // size = n - 1
-    fec_int_t *tmp_vec_redundancy; // size = k - 1
+    fec_int_t *pak_multiplier; // size = n
+    fec_perf_int_t *tmp_pak; // size = L
 #endif
 } fec_rx_state_t;
 
