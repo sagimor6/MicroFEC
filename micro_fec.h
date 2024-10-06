@@ -139,8 +139,6 @@ typedef struct {
 #endif
 } fec_tx_state_t;
 
-//#define FEC_USER_GIVEN_BUFFER
-
 typedef struct {
     fec_idx_t n;
     fec_idx_t k;
@@ -189,6 +187,7 @@ EXPORT void fec_inv_cache_destroy(fec_inv_cache_t *inv_cache);
 EXPORT fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len);
 EXPORT fec_status_t fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
 EXPORT fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak);
+EXPORT void fec_tx_reset(fec_tx_state_t *tx_state);
 EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
 #ifndef FEC_USER_GIVEN_BUFFER

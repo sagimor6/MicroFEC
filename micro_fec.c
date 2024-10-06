@@ -245,6 +245,10 @@ fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len) 
     return FEC_STATUS_SUCCESS;
 }
 
+void fec_tx_reset(fec_tx_state_t *tx_state) {
+    memset(tx_state->paks, 0, tx_state->n * sizeof(tx_state->paks[0]));
+}
+
 void fec_tx_destroy(fec_tx_state_t *tx_state) {
     if (tx_state->paks != NULL) {
         free(tx_state->paks);
@@ -932,31 +936,31 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-    fec_rx_col_init(tmp_recovered_ints, ones_pak_ii, num_y_missing);
+        fec_rx_col_init(tmp_recovered_ints, ones_pak_ii, num_y_missing);
 
-    for (j = 0; j < num_y_present + num_x_present; j++) {
-        fec_int_t xy_j = present_y[j];
-        fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
-        fec_rx_col_op(tmp_recovered_ints, num_y_missing, xy_pak_arr_j_val, missing_y, inv_arr, xy_j);
-    }
-
-    fec_rx_col_perf_to_norm(tmp_recovered_ints, num_y_missing, ii, _NORM_FMA_PARAMS);
-#else
-    for (i = 0; i < num_y_missing; i++) {
-        tmp_recovered_ints[i] = ones_pak_ii;
-    }
-
-    for (j = 0; j < num_y_present + num_x_present; j++) {
-        fec_int_t xy_j = present_y[j];
-        fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
-        for (i = 0; i < num_y_missing; i++) {
-            fec_int_t missing_y_i = missing_y[i];
-            tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+        for (j = 0; j < num_y_present + num_x_present; j++) {
+            fec_int_t xy_j = present_y[j];
+            fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+            fec_rx_col_op(tmp_recovered_ints, num_y_missing, xy_pak_arr_j_val, missing_y, inv_arr, xy_j);
         }
-    }
-    for (i = 0; i < num_y_missing; i++) {
-        _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
-    }
+
+        fec_rx_col_perf_to_norm(tmp_recovered_ints, num_y_missing, ii, _NORM_FMA_PARAMS);
+#else
+        for (i = 0; i < num_y_missing; i++) {
+            tmp_recovered_ints[i] = ones_pak_ii;
+        }
+
+        for (j = 0; j < num_y_present + num_x_present; j++) {
+            fec_int_t xy_j = present_y[j];
+            fec_int_t xy_pak_arr_j_ii = _GET_XY_PAK(j)[ii];
+            for (i = 0; i < num_y_missing; i++) {
+                fec_int_t missing_y_i = missing_y[i];
+                tmp_recovered_ints[i] ^= poly_mul(xy_pak_arr_j_ii, _fec_inv(inv_cache, poly_add(xy_j, missing_y_i)));
+            }
+        }
+        for (i = 0; i < num_y_missing; i++) {
+            _GET_X_PAK(i)[ii] = ((fec_int_t*)tmp_recovered_ints)[i];
+        }
 #endif
     }
 #endif
