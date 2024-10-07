@@ -5,19 +5,20 @@
 #include "dummy_defs.h"
 
 #if INIT_FUNC_NAME != -1
-static void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, fec_int_t val, LEN_PARAM_TYPE len) {
+static void __attribute__((noinline)) INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len, INIT_FUNC_ARGS) {
     LEN_PARAM_TYPE i;
-    union {
-        fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
-        fec_perf_int_t vec_val;
-    } vec_val = {.val_arr = {
-#if defined (FEC_HAS_CLMUL32) || defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
-        [0] = val
-#else
-        [(sizeof(fec_perf_int_t)/(sizeof(fec_int_t))) - 1] = val
-#endif
-    }};
+    // TODO: it appears the compiler doesn't optimize this well, just make case for every opt
     for(i = 0; i < len; i++) {
+        union {
+            fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
+            fec_perf_int_t vec_val;
+        } vec_val = {.val_arr = {
+#if defined (FEC_HAS_CLMUL32) || defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
+            [0] = INIT_FUNC_READ_INPUT(i)
+#else
+            [(sizeof(fec_perf_int_t)/(sizeof(fec_int_t))) - 1] = INIT_FUNC_READ_INPUT(i)
+#endif
+        }};
         ((__typeof__(vec_val)*)perf_col)[i] = vec_val;
     }
 }

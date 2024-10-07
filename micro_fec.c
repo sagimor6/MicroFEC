@@ -311,7 +311,9 @@ fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, siz
     MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
 #else
     MALLOC_ATTR(pak_multiplier, n);
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     MALLOC_ATTR(tmp_pak, pak_len);
+#endif
 #endif
 
 #undef MALLOC_ATTR
@@ -362,7 +364,9 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
     FREE_ATTR(tmp_recovered_ints);
 #else
     FREE_ATTR(pak_multiplier);
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     FREE_ATTR(tmp_pak);
+#endif
 #endif
 #undef FREE_ATTR
 }
@@ -599,6 +603,8 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
 #ifdef FEC_MIN_MEM
 #define LEN_PARAM_TYPE fec_idx_t
+#define INIT_FUNC_ARGS fec_int_t val
+#define INIT_FUNC_READ_INPUT(j) val
 #define INPUT_ARGS const fec_int_t* restrict missing_y, const fec_int_t* restrict inv_arr, fec_int_t pak_xy
 #define READ_INPUT(j) inv_arr[poly_add(pak_xy, missing_y[j])]
 #define OUTPUT_ARGS size_t ii, _NORM_FMA_PARAMS_DEC
@@ -615,8 +621,12 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #undef READ_INPUT
 #undef OUTPUT_ARGS
 #undef WRITE_OUTPUT
+#undef INIT_FUNC_ARGS
+#undef INIT_FUNC_READ_INPUT
 #else
 #define LEN_PARAM_TYPE size_t
+#define INIT_FUNC_ARGS const fec_int_t* restrict ones_pak
+#define INIT_FUNC_READ_INPUT(j) ones_pak[j]
 #define INPUT_ARGS const fec_int_t* restrict pak
 #define READ_INPUT(j) pak[j]
 #define OUTPUT_ARGS unaligend_fec_int_t* restrict out_pak
@@ -633,6 +643,8 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #undef READ_INPUT
 #undef OUTPUT_ARGS
 #undef WRITE_OUTPUT
+#undef INIT_FUNC_ARGS
+#undef INIT_FUNC_READ_INPUT
 #endif
 #endif
 
@@ -809,16 +821,20 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     start_time = get_timestamp();
 #endif
 
+#if !defined(FEC_MIN_MEM) || (!defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT))
+    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
+#endif
+
 #ifdef FEC_MIN_MEM
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
-    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
 #else
     fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
 #endif
 #else
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t *tmp_pak = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_pak + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
-    const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
+#endif
 #endif
 
 #ifndef FEC_MIN_MEM
@@ -826,10 +842,9 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     for (j = 0; j < num_y_missing; j++) {
         y_j = missing_y[j];
 
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
         if (has_one_row) {
-            for (ii = 0; ii < pak_len; ii++) {
-                tmp_pak[ii] = (fec_perf_int_t){ones_pak[ii]};
-            }
+            fec_rx_col_init2(tmp_pak, pak_len, ones_pak);
         } else {
             memset(tmp_pak, 0, sizeof(tmp_pak[0])*pak_len);
         }
@@ -840,6 +855,40 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
         unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
         fec_rx_col_perf_to_norm2(tmp_pak, pak_len, rec_pak);
+#else
+        unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
+        if (j != num_y_missing - 1 || !has_one_row) {
+            fec_int_t mult = pak_multiplier[num_y_present];
+            for (ii = 0; ii < pak_len; ii++) {
+                rec_pak[ii] = poly_mul(rec_pak[ii], mult);
+            }
+
+            for(i = 0; i < n - has_one_row; i++) {
+                if (i == num_y_present) {
+                    continue;
+                }
+                unaligend_fec_int_t* pak = _GET_XY_PAK(i);
+                fec_int_t mult = pak_multiplier[i];
+                for(ii = 0; ii < pak_len; ii++) {
+                    rec_pak[ii] ^= poly_mul(pak[ii], mult);
+                }
+            }
+            
+            if (has_one_row) {
+                for(ii = 0; ii < pak_len; ii++) {
+                    rec_pak[ii] ^= ones_pak[ii];
+                }
+            }
+        } else {
+            for (i = 0; i < n - 1; i++) {
+                unaligend_fec_int_t* pak = _GET_XY_PAK(i);
+                fec_int_t mult = pak_multiplier[i];
+                for(ii = 0; ii < pak_len; ii++) {
+                    rec_pak[ii] ^= poly_mul(pak[ii], mult);
+                }
+            }
+        }
+#endif
 
         // fec_int_t pi_yx_div_yy = 1;
         // for (i = j; i < num_x_present; i++) {
@@ -936,7 +985,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-        fec_rx_col_init(tmp_recovered_ints, ones_pak_ii, num_y_missing);
+        fec_rx_col_init(tmp_recovered_ints, num_y_missing, ones_pak_ii);
 
         for (j = 0; j < num_y_present + num_x_present; j++) {
             fec_int_t xy_j = present_y[j];

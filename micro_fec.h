@@ -170,7 +170,9 @@ typedef struct {
 #endif
 #else
     fec_int_t *pak_multiplier; // size = n
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t *tmp_pak; // size = L
+#endif
 #endif
 } fec_rx_state_t;
 
