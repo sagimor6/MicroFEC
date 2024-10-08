@@ -932,7 +932,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
             num_y_present++;
         } else {
             if (!has_one_row) {
-                printf("asfsdfsfd\n");
                 fec_int_t x_j = present_x[0];
                 for (i = 0; i < num_y_present; i++) {
                     fec_int_t y_i = present_y[i];
@@ -1031,8 +1030,6 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
             pak[ii] = poly_mul(pak[ii], pak_multiplier[i]);
         }
     }
-
-    printf("%04x %04x\n", pak_multiplier[0], pak_multiplier[1]);
 #else
     for (i = 0; i < num_y_missing; i++) {
         fec_int_t pi_yx_div_yy_i = 1;
