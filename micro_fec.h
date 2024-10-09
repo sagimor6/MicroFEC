@@ -8,6 +8,8 @@
 typedef uint16_t fec_int_t;
 typedef uint32_t fec_idx_t;
 
+//#define _FEC_NO_OPT
+//#define _FEC_NO_TX_OPT
 //#define _FEC_NO_RX_OPT
 //#define FEC_MIN_MEM
 //#define FEC_USER_GIVEN_BUFFER
