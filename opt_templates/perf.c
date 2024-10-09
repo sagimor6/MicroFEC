@@ -5,7 +5,7 @@
 #include "dummy_defs.h"
 
 #if INIT_FUNC_NAME != -1
-static void __attribute__((noinline)) INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len, INIT_FUNC_ARGS) {
+static void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len, INIT_FUNC_ARGS) {
     LEN_PARAM_TYPE i;
     // TODO: it appears the compiler doesn't optimize this well, just make case for every opt
     for(i = 0; i < len; i++) {
