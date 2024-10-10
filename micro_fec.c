@@ -91,8 +91,7 @@ static fec_int_t PERF_DEBUG_ATTRS poly_mul(fec_int_t a, fec_int_t b) {
     uint32_t res = 0;
 
     for (i = 0; i < sizeof(fec_int_t)*8; i++) {
-        res ^= (((uint32_t)a) << i) & (-(uint32_t)(b & 1));
-        b >>= 1;
+        res ^= (((uint32_t)a) << i) & ((uint32_t)(int32_t)(((int16_t)(b << (15 - i))) >> 15));
     }
 
     uint16_t res2 = res;
