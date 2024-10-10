@@ -7,17 +7,52 @@ import typing
 _is_sys_big_endian = (sys.byteorder == 'big')
 
 POLY_G = (1<<5) + (1<<3) + (1<<1) + (1<<0)
+REAL_POLY_G = POLY_G + (1<<16)
 
 def poly_add(a: int, b: int) -> int:
     return a ^ b
 
+# def poly_mul(a: int, b: int) -> int:
+#     res = 0
+#     for i in range(16):
+#         res <<= 1
+#         res ^= ((1<<16) | POLY_G) & (-(res >> 16))
+#         res ^= a & (-(b >> 15))
+#         b = (b << 1) & ((1<<16) - 1)
+    
+#     return res
+
 def poly_mul(a: int, b: int) -> int:
     res = 0
     for i in range(16):
-        res <<= 1
-        res ^= ((1<<16) | POLY_G) & (-(res >> 16))
-        res ^= a & (-(b >> 15))
-        b = (b << 1) & ((1<<16) - 1)
+        res ^= (a << i) & (-((b >> i) & 1))
+
+    carry = res >> 16
+    carry ^= (carry << 1) ^ (carry << 3) ^ (carry << 5)
+
+    res ^= carry
+    carry = carry >> 16
+
+    res ^= carry ^ (carry << 1) ^ (carry << 3) ^ (carry << 5)
+    
+    return (res & 0xFFFF)
+
+def calc_all_invs():
+    # a = 0b11 # ord(a) = ord(group) = 2**16 - 1
+    group_ord = (1<<16) - 1
+    a_i = 1
+    group = [a_i]
+    for i in range(1, group_ord + 1):
+        #a_i = poly_mul(a_i, a)
+        a_i ^= (a_i << 1)
+        a_i ^= (-(a_i >> 16)) & REAL_POLY_G
+        group.append(a_i)
+    
+    res = [0]*group_ord
+    res[0] = 1
+
+    for i in range(1, (1<<16) - 1):
+        res[group[i] - 1] = group[group_ord - i]
     
     return res
 
@@ -44,7 +79,10 @@ class FecInvCache:
         else:
             sz = 1
         
-        self.inv_arr = [poly_inv(i) for i in range(1, sz)]
+        if sz <= 128:
+            self.inv_arr = [poly_inv(i) for i in range(1, sz)]
+        else:
+            self.inv_arr = calc_all_invs()[:sz - 1]
     
     @staticmethod
     def from_n_k(n: int, k: int) -> 'FecInvCache':
@@ -243,6 +281,9 @@ def main():
     for i in range(k, len(paks)):
         rx_ctx.add_pak(paks[i], i)
     print(repr(rx_ctx.reconstruct(inv_cache)))
+    # for i in range(100):
+    #     FecInvCache.from_n_k(256, 1)
+    #     #calc_all_invs()
     pass
 
 if __name__ == '__main__':

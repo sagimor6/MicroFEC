@@ -57,7 +57,7 @@ all: $(BUILD)/libmicro_fec.so $(BUILD)/libmicro_fec.a fec_test
 
 .PHONY fec_test:
 fec_test: $(BUILD)/fec_test.elf
-	$(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf 1000 200 50000
+	sudo $(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf 10000 2000 500
 
 $(BUILD)/:
 	mkdir -p $@
