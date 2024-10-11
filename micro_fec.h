@@ -14,6 +14,8 @@ typedef uint32_t fec_idx_t;
 //#define FEC_MIN_MEM
 //#define FEC_USER_GIVEN_BUFFER
 //#define FEC_DO_ENDIAN_SWAP
+//#define PERF_TX_BLOCK_SIZE 256
+//#define PERF_RX_BLOCK_SIZE 256
 
 typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
 
@@ -134,7 +136,7 @@ typedef struct {
 
     const unaligend_fec_int_t** paks; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    fec_perf_int_t* tmp_pak; // size = L
+    fec_perf_int_t* tmp_pak; // size = L or min(L, PERF_TX_BLOCK_SIZE)
 #endif
 } fec_tx_state_t;
 
@@ -162,15 +164,23 @@ typedef struct {
     fec_int_t *missing_y; // size = k
 
 #ifdef FEC_MIN_MEM
-#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-    fec_perf_int_t *tmp_recovered_ints; // size = k
-#else
+#if defined(_FEC_NO_OPT) || defined(_FEC_NO_RX_OPT)
     fec_int_t *tmp_recovered_ints; // size = k
+#elif defined(PERF_RX_BLOCK_SIZE)
+    fec_int_t *tmp_recovered_ints; // size = k
+    fec_perf_int_t *tmp_recovered_block; // size = min(k, PERF_RX_BLOCK_SIZE)
+#else
+    fec_perf_int_t *tmp_recovered_ints; // size = k
 #endif
 #else
     fec_int_t *pak_multiplier; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#ifdef PERF_RX_BLOCK_SIZE
+    fec_int_t *tmp_pak; // size = L
+    fec_perf_int_t *tmp_block; // size = min(L, PERF_RX_BLOCK_SIZE)
+#else
     fec_perf_int_t *tmp_pak; // size = L
+#endif
 #endif
 #endif
 } fec_rx_state_t;

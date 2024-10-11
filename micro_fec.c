@@ -234,7 +234,11 @@ fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len) 
     }
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    tx_state->tmp_pak = malloc(pak_len * sizeof(tx_state->tmp_pak[0]) + CALC_EXTRA_FOR_ALIGNED_MALLOC(tx_state->tmp_pak[0]));
+    size_t tmp_pak_elems = pak_len;
+#ifdef PERF_TX_BLOCK_SIZE
+    tmp_pak_elems = MIN(tmp_pak_elems, PERF_TX_BLOCK_SIZE);
+#endif
+    tx_state->tmp_pak = malloc(tmp_pak_elems * sizeof(tx_state->tmp_pak[0]) + CALC_EXTRA_FOR_ALIGNED_MALLOC(tx_state->tmp_pak[0]));
     if (tx_state->tmp_pak == NULL) {
         fec_tx_destroy(tx_state);
         return FEC_STATUS_OUT_OF_MEMORY;
@@ -307,10 +311,16 @@ fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, siz
     MALLOC_ATTR(missing_y, MIN(k, n));
 
 #ifdef FEC_MIN_MEM
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT) && defined(PERF_RX_BLOCK_SIZE)
+    MALLOC_ATTR(tmp_recovered_block, MIN(MIN(k, n), PERF_RX_BLOCK_SIZE));
+#endif
     MALLOC_ATTR(tmp_recovered_ints, MIN(k, n));
 #else
     MALLOC_ATTR(pak_multiplier, n);
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#ifdef PERF_RX_BLOCK_SIZE
+    MALLOC_ATTR(tmp_block, MIN(pak_len, PERF_RX_BLOCK_SIZE));
+#endif
     MALLOC_ATTR(tmp_pak, pak_len);
 #endif
 #endif
@@ -360,10 +370,16 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
     FREE_ATTR(missing_y);
 
 #ifdef FEC_MIN_MEM
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT) && defined(PERF_RX_BLOCK_SIZE)
+    FREE_ATTR(tmp_recovered_block);
+#endif
     FREE_ATTR(tmp_recovered_ints);
 #else
     FREE_ATTR(pak_multiplier);
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#ifdef PERF_RX_BLOCK_SIZE
+    FREE_ATTR(tmp_block);
+#endif
     FREE_ATTR(tmp_pak);
 #endif
 #endif
@@ -497,7 +513,7 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     const fec_int_t* restrict inv_arr = inv_cache->inv_arr - 1;
 #endif
 
-    if (n == 0) {
+    if (n == 0 || pak_len == 0) {
         return FEC_STATUS_SUCCESS;
     }
 
@@ -547,17 +563,26 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
     }
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    fec_tx_init_perf_arr(tmp_pak, pak_len);
-    for (i = 0; i < n; i++) {
-        fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
-        const unaligend_fec_int_t* pak = paks[i];
-        fec_tx_col_op(tmp_pak, pak_len, a_i, pak);
-    }
-#if defined(FEC_DO_ENDIAN_SWAP) && !defined(FEC_HAS_CLMUL32)
-    // before normalizing, bswap(a)*b = bswap(a*b), bswap(a^b) = bswap(a)^bswap(b)
-    mem_bswap((fec_int_t*)tmp_pak, (sizeof(tmp_pak[0])/(sizeof(fec_int_t))) * pak_len);
+#ifdef PERF_TX_BLOCK_SIZE
+    for (j = 0; j < pak_len; j += PERF_TX_BLOCK_SIZE) {
+        size_t cur_pak_len = MIN(PERF_TX_BLOCK_SIZE, pak_len - j);
+#else
+    {
+        j = 0;
+        size_t cur_pak_len = pak_len;
 #endif
-    fec_tx_col_perf_to_norm(tmp_pak, pak_len, out_pak);
+        fec_tx_init_perf_arr(tmp_pak, cur_pak_len);
+        for (i = 0; i < n; i++) {
+            fec_int_t a_i = inv_arr[poly_add(n + idx - 1, i)];
+            const unaligend_fec_int_t* pak = paks[i];
+            fec_tx_col_op(tmp_pak, cur_pak_len, a_i, &pak[j]);
+        }
+#if defined(FEC_DO_ENDIAN_SWAP) && !defined(FEC_HAS_CLMUL32)
+        // before normalizing, bswap(a)*b = bswap(a*b), bswap(a^b) = bswap(a)^bswap(b)
+        mem_bswap((fec_int_t*)tmp_pak, (sizeof(tmp_pak[0])/(sizeof(fec_int_t))) * cur_pak_len);
+#endif
+        fec_tx_col_perf_to_norm(tmp_pak, cur_pak_len, &out_pak[j]);
+    }
 
 #if !defined(FEC_HAS_128_INT_VEC) && defined(FEC_HAS_64_INT_VEC) && (defined(__x86_64__) || defined(__i386__))
     _mm_empty();
@@ -589,13 +614,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #define _GET_X_PAK(idx) (x_pak_arr[(idx)])
 #define _GET_Y_PAK(idx) (y_pak_arr[(idx)])
 #define _GET_XY_PAK(idx) _GET_Y_PAK(idx)
-#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t** x_pak_arr
+#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t* restrict* restrict x_pak_arr
 #define _NORM_FMA_PARAMS x_pak_arr
 #else
 #define _GET_X_PAK(idx) (&x_paks_buf[(idx)*pak_len])
 #define _GET_Y_PAK(idx) (&y_paks_buf[(idx)*pak_len])
 #define _GET_XY_PAK(idx) _GET_Y_PAK(idx)
-#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t* x_paks_buf, size_t pak_len
+#define _NORM_FMA_PARAMS_DEC unaligend_fec_int_t* restrict x_paks_buf, size_t pak_len
 #define _NORM_FMA_PARAMS x_paks_buf, pak_len
 #endif
 
@@ -606,8 +631,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #define INIT_FUNC_READ_INPUT(j) val
 #define INPUT_ARGS const fec_int_t* restrict missing_y, const fec_int_t* restrict inv_arr, fec_int_t pak_xy
 #define READ_INPUT(j) inv_arr[poly_add(pak_xy, missing_y[j])]
+#ifdef PERF_RX_BLOCK_SIZE
+#define OUTPUT_ARGS fec_int_t* restrict tmp_recovered_ints
+#define WRITE_OUTPUT(j, val) tmp_recovered_ints[j] = val
+#else
 #define OUTPUT_ARGS size_t ii, _NORM_FMA_PARAMS_DEC
 #define WRITE_OUTPUT(j, val) _GET_X_PAK(j)[ii] = val
+#endif
 #define INIT_FUNC_NAME fec_rx_col_init
 #define FMA_FUNC_NAME fec_rx_col_op
 #define NORM_FUNC_NAME fec_rx_col_perf_to_norm
@@ -628,8 +658,13 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #define INIT_FUNC_READ_INPUT(j) ones_pak[j]
 #define INPUT_ARGS const fec_int_t* restrict pak
 #define READ_INPUT(j) pak[j]
+#ifdef PERF_RX_BLOCK_SIZE
+#define OUTPUT_ARGS fec_int_t* restrict out_pak
+#define WRITE_OUTPUT(j, val) out_pak[j] = val
+#else
 #define OUTPUT_ARGS unaligend_fec_int_t* restrict out_pak
 #define WRITE_OUTPUT(j, val) out_pak[j] = val
+#endif
 #define INIT_FUNC_NAME fec_rx_col_init2
 #define FMA_FUNC_NAME fec_rx_col_op2
 #define NORM_FUNC_NAME fec_rx_col_perf_to_norm2
@@ -824,24 +859,40 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     const fec_int_t* inv_arr = inv_cache->inv_arr - 1;
 #endif
 
-#ifdef FEC_MIN_MEM
+#ifndef FEC_MIN_MEM
+
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-    fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
+#ifdef PERF_RX_BLOCK_SIZE
+    fec_perf_int_t *tmp_block = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_block + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
+    fec_int_t *tmp_pak = rx_state->tmp_pak;
 #else
-    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
-#endif
-#else
-#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
     fec_perf_int_t *tmp_pak = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_pak + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
 #endif
 #endif
 
-#ifndef FEC_MIN_MEM
     fec_int_t y_j;
     for (j = 0; j < num_y_missing; j++) {
         y_j = missing_y[j];
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#ifdef PERF_RX_BLOCK_SIZE
+        for (ii = 0; ii < pak_len; ii += PERF_RX_BLOCK_SIZE) {
+            size_t cur_block_size = MIN(PERF_RX_BLOCK_SIZE, pak_len - ii);
+            if (has_one_row) {
+                fec_rx_col_init2(tmp_block, cur_block_size, ones_pak);
+            } else {
+                memset(tmp_block, 0, sizeof(tmp_pak[0])*cur_block_size);
+            }
+
+            for (i = 0; i < n - has_one_row; i++) {
+                fec_rx_col_op2(tmp_block, cur_block_size, pak_multiplier[i], _GET_XY_PAK(i));
+            }
+            
+            fec_rx_col_perf_to_norm2(tmp_block, cur_block_size, &tmp_pak[ii]);
+        }
+        unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
+        memcpy(rec_pak, tmp_pak, pak_len * sizeof(fec_int_t));
+#else
         if (has_one_row) {
             fec_rx_col_init2(tmp_pak, pak_len, ones_pak);
         } else {
@@ -854,6 +905,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
         unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
         fec_rx_col_perf_to_norm2(tmp_pak, pak_len, rec_pak);
+#endif
 #else
         unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
         if (j != num_y_missing - 1 || !has_one_row) {
@@ -955,8 +1007,16 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 #else
 
+#if defined(_FEC_NO_OPT) || defined(_FEC_NO_RX_OPT)
+    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+#elif defined(PERF_RX_BLOCK_SIZE)
+    fec_perf_int_t* tmp_recovered_block = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_block + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
+    fec_int_t* tmp_recovered_ints = rx_state->tmp_recovered_ints;
+#else
+    fec_perf_int_t* tmp_recovered_ints = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_recovered_ints + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
+#endif
+
     for (ii = 0; ii < pak_len; ii++) {
-        
 
         fec_int_t ones_pak_ii = 0;
         if (has_one_row) {
@@ -983,6 +1043,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+#ifndef PERF_RX_BLOCK_SIZE
         fec_rx_col_init(tmp_recovered_ints, num_y_missing, ones_pak_ii);
 
         for (j = 0; j < num_y_present + num_x_present; j++) {
@@ -992,6 +1053,23 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         }
 
         fec_rx_col_perf_to_norm(tmp_recovered_ints, num_y_missing, ii, _NORM_FMA_PARAMS);
+#else
+        for (i = 0; i < num_y_missing; i += PERF_RX_BLOCK_SIZE) {
+            fec_idx_t cur_block_size = MIN(PERF_RX_BLOCK_SIZE, num_y_missing - i);
+            fec_rx_col_init(tmp_recovered_block, cur_block_size, ones_pak_ii);
+
+            for (j = 0; j < num_y_present + num_x_present; j++) {
+                fec_int_t xy_j = present_y[j];
+                fec_int_t xy_pak_arr_j_val = _GET_XY_PAK(j)[ii];
+                fec_rx_col_op(tmp_recovered_block, cur_block_size, xy_pak_arr_j_val, &missing_y[i], inv_arr, xy_j);
+            }
+
+            fec_rx_col_perf_to_norm(tmp_recovered_block, cur_block_size, &tmp_recovered_ints[i]);
+        }
+        for (i = 0; i < num_y_missing; i++) {
+            _GET_X_PAK(i)[ii] = tmp_recovered_ints[i];
+        }
+#endif
 #else
         for (i = 0; i < num_y_missing; i++) {
             tmp_recovered_ints[i] = ones_pak_ii;
