@@ -3,10 +3,14 @@
 #CROSS_PREFIX = /home/sagi/git_repos/static-python/aa/static-python/armv7-eabihf--musl--bleeding-edge-2023.11-1/bin/arm-buildroot-linux-musleabihf-
 #CROSS_RUNNER = qemu-aarch64-static
 #CROSS_RUNNER = qemu-arm-static
-CC = $(CROSS_PREFIX)clang
+CC_NAME ?= clang
+CC = $(CROSS_PREFIX)$(CC_NAME)
 OBJCOPY = $(CROSS_PREFIX)objcopy
 
-CFLAGS += -pedantic-errors -Wno-pedantic -Wall -Wextra -Wnull-dereference -Waggressive-loop-optimizations -Wstrict-overflow=5 -Wuninitialized
+check_cc_flag = $(if $(shell if $(CC) $(1) -Werror -Wl,--help -xc -o /dev/null /dev/null >/dev/null 2>/dev/null; then echo a; fi; ),$(1),)
+
+CFLAGS += -pedantic-errors -Wno-pedantic -Wall -Wextra -Wnull-dereference -Wstrict-overflow=5 -Wuninitialized
+CFLAGS += -Waggressive-loop-optimization
 #CFLAGS += -DFEC_MIN_MEM -DFEC_LARGE_K
 
 DEBUG_CFLAGS += -g
@@ -14,13 +18,12 @@ DEBUG_CFLAGS += -g
 
 OPT_CFLAGS += -ffunction-sections -fdata-sections -O3 -fvisibility=hidden
 OPT_CFLAGS += -falign-loops=32
-OPT_CFLAGS += -mbranches-within-32B-boundaries
-#OPT_CFLAGS += -Wa,-mbranches-within-32B-boundaries
+OPT_CFLAGS += -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
 OPT_CFLAGS += -march=skylake
-OPT_LDFLAGS = -Wl,--gc-sections
+OPT_LDFLAGS += -Wl,--gc-sections
 
 # 32bit:
-OPT_CFLAGS += -m32
+# OPT_CFLAGS += -m32
 
 # pclmul:
 # OPT_CFLAGS += -mpclmul
@@ -50,6 +53,10 @@ OPT_CFLAGS += -mno-pclmul -mavx2
 #CROSS_FLAGS += -static
 #VALGRIND = valgrind -s --show-leak-kinds=all --partial-loads-ok=no --expensive-definedness-checks=yes
 
+OPT_CFLAGS := $(foreach cflag,$(OPT_CFLAGS),$(call check_cc_flag,$(cflag)))
+CFLAGS := $(foreach cflag,$(CFLAGS),$(call check_cc_flag,$(cflag)))
+OPT_LDFLAGS := $(foreach cflag,$(OPT_LDFLAGS),$(call check_cc_flag,$(cflag)))
+
 BUILD = build
 
 .PHONY all:
@@ -63,7 +70,7 @@ $(BUILD)/:
 	mkdir -p $@
 
 $(BUILD)/fec_test.elf: main.c micro_fec.c | $(BUILD)/
-	$(CC) $(CFLAGS) $(DEBUG_CFLAGS) $(OPT_CFLAGS) $(OPT_LDFLAGS) $(CROSS_FLAGS) -DN_BLOCK=$(N_BLOCK) -o $@ $^
+	$(CC) $(CFLAGS) $(DEBUG_CFLAGS) $(OPT_CFLAGS) $(OPT_LDFLAGS) $(CROSS_FLAGS) -o $@ $^
 
 $(BUILD)/micro_fec.o_static: micro_fec.c | $(BUILD)/
 	#-flinker-output=nolto-rel
