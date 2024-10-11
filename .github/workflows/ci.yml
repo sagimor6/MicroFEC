@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: compilers
+    - name: compilers 
       run: apt install clang
     - name: make
       run: make clean build/fec_test.elf
