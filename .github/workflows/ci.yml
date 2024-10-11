@@ -18,6 +18,6 @@ jobs:
     - name: compilers
       run: apt install clang
     - name: adsf
-      run: echo asdfdf
+      run: echo asdfdfsdf
     - name: make
       run: make clean build/fec_test.elf
