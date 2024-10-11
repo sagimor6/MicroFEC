@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: compilers
-      run: apt install clang
+      run: sudo apt-get clang
     - name: adsf
       run: echo asdfdfsdf
     - name: make
