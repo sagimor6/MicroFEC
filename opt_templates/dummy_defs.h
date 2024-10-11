@@ -10,6 +10,13 @@
 
 #ifndef INIT_FUNC_NAME
 #define INIT_FUNC_NAME fec_init_col
+#ifndef INIT_FUNC_ARGS
+#define INIT_FUNC_ARGS fec_int_t *__dummy
+#endif
+
+#ifndef INIT_FUNC_READ_INPUT
+#define INIT_FUNC_READ_INPUT(j) __dummy[j]
+#endif
 #endif
 
 #ifndef LEN_PARAM_TYPE
