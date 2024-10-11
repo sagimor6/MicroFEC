@@ -17,7 +17,7 @@ typedef uint32_t fec_idx_t;
 //#define PERF_TX_BLOCK_SIZE 256
 //#define PERF_RX_BLOCK_SIZE 256
 
-typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
+typedef fec_int_t __attribute__((aligned(1))) unaligned_fec_int_t;
 
 typedef enum {
     FEC_STATUS_SUCCESS,
@@ -134,7 +134,7 @@ typedef struct {
     fec_idx_t n;
     size_t pak_len;
 
-    const unaligend_fec_int_t** paks; // size = n
+    const unaligned_fec_int_t** paks; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
     fec_perf_int_t* tmp_pak; // size = L or min(L, PERF_TX_BLOCK_SIZE)
 #endif
@@ -149,10 +149,10 @@ typedef struct {
 
     uint8_t* received_paks_bitmap; // size = (n + real k)/8
 #ifndef FEC_USER_GIVEN_BUFFER
-    unaligend_fec_int_t** pak_arr; // size = n
-    unaligend_fec_int_t* ones_pak;
+    unaligned_fec_int_t** pak_arr; // size = n
+    unaligned_fec_int_t* ones_pak;
 #else
-    unaligend_fec_int_t *pak_buffer; // given by user (size = n*pak_len)
+    unaligned_fec_int_t *pak_buffer; // given by user (size = n*pak_len)
     fec_int_t ones_pak_idx;
     bool has_one_pak; // TODO: actually x_i cannot be 0, cause n > 0, so ones_pak_idx can point to elem in pak_xy_arr with 0.
     // TODO: we also have this info from the bitfield
