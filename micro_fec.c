@@ -318,10 +318,11 @@ fec_status_t fec_rx_init(fec_rx_state_t *rx_state, fec_idx_t n, fec_idx_t k, siz
 #else
     MALLOC_ATTR(pak_multiplier, n);
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+    size_t tmp_pak_elems = pak_len;
 #ifdef PERF_RX_BLOCK_SIZE
-    MALLOC_ATTR(tmp_block, MIN(pak_len, PERF_RX_BLOCK_SIZE));
+    tmp_pak_elems = MIN(tmp_pak_elems, PERF_RX_BLOCK_SIZE);
 #endif
-    MALLOC_ATTR(tmp_pak, pak_len);
+    MALLOC_ATTR(tmp_pak, tmp_pak_elems);
 #endif
 #endif
 
@@ -377,9 +378,6 @@ void fec_rx_destroy(fec_rx_state_t *rx_state) {
 #else
     FREE_ATTR(pak_multiplier);
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-#ifdef PERF_RX_BLOCK_SIZE
-    FREE_ATTR(tmp_block);
-#endif
     FREE_ATTR(tmp_pak);
 #endif
 #endif
@@ -658,13 +656,8 @@ fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec
 #define INIT_FUNC_READ_INPUT(j) ones_pak[j]
 #define INPUT_ARGS const fec_int_t* restrict pak
 #define READ_INPUT(j) pak[j]
-#ifdef PERF_RX_BLOCK_SIZE
-#define OUTPUT_ARGS fec_int_t* restrict out_pak
-#define WRITE_OUTPUT(j, val) out_pak[j] = val
-#else
 #define OUTPUT_ARGS unaligend_fec_int_t* restrict out_pak
 #define WRITE_OUTPUT(j, val) out_pak[j] = val
-#endif
 #define INIT_FUNC_NAME fec_rx_col_init2
 #define FMA_FUNC_NAME fec_rx_col_op2
 #define NORM_FUNC_NAME fec_rx_col_perf_to_norm2
@@ -862,12 +855,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #ifndef FEC_MIN_MEM
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-#ifdef PERF_RX_BLOCK_SIZE
-    fec_perf_int_t *tmp_block = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_block + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
-    fec_int_t *tmp_pak = rx_state->tmp_pak;
-#else
     fec_perf_int_t *tmp_pak = (fec_perf_int_t*)(((uintptr_t)rx_state->tmp_pak + __alignof__(fec_perf_int_t) - 1) & (-__alignof__(fec_perf_int_t)));
-#endif
 #endif
 
     fec_int_t y_j;
@@ -875,37 +863,28 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
         y_j = missing_y[j];
 
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+        unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
 #ifdef PERF_RX_BLOCK_SIZE
         for (ii = 0; ii < pak_len; ii += PERF_RX_BLOCK_SIZE) {
             size_t cur_block_size = MIN(PERF_RX_BLOCK_SIZE, pak_len - ii);
+#else
+        {
+            ii = 0;
+            size_t cur_block_size = pak_len;
+#endif
+            
             if (has_one_row) {
-                fec_rx_col_init2(tmp_block, cur_block_size, ones_pak);
+                fec_rx_col_init2(tmp_pak, cur_block_size, ones_pak);
             } else {
-                memset(tmp_block, 0, sizeof(tmp_pak[0])*cur_block_size);
+                memset(tmp_pak, 0, sizeof(tmp_pak[0])*cur_block_size);
             }
 
             for (i = 0; i < n - has_one_row; i++) {
-                fec_rx_col_op2(tmp_block, cur_block_size, pak_multiplier[i], _GET_XY_PAK(i));
+                fec_rx_col_op2(tmp_pak, cur_block_size, pak_multiplier[i], _GET_XY_PAK(i));
             }
             
-            fec_rx_col_perf_to_norm2(tmp_block, cur_block_size, &tmp_pak[ii]);
+            fec_rx_col_perf_to_norm2(tmp_pak, cur_block_size, &rec_pak[ii]);
         }
-        unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
-        memcpy(rec_pak, tmp_pak, pak_len * sizeof(fec_int_t));
-#else
-        if (has_one_row) {
-            fec_rx_col_init2(tmp_pak, pak_len, ones_pak);
-        } else {
-            memset(tmp_pak, 0, sizeof(tmp_pak[0])*pak_len);
-        }
-
-        for(i = 0; i < n - has_one_row; i++) {
-            fec_rx_col_op2(tmp_pak, pak_len, pak_multiplier[i], _GET_XY_PAK(i));
-        }
-
-        unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
-        fec_rx_col_perf_to_norm2(tmp_pak, pak_len, rec_pak);
-#endif
 #else
         unaligend_fec_int_t* rec_pak = _GET_X_PAK(j);
         if (j != num_y_missing - 1 || !has_one_row) {

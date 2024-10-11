@@ -175,12 +175,7 @@ typedef struct {
 #else
     fec_int_t *pak_multiplier; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-#ifdef PERF_RX_BLOCK_SIZE
-    fec_int_t *tmp_pak; // size = L
-    fec_perf_int_t *tmp_block; // size = min(L, PERF_RX_BLOCK_SIZE)
-#else
-    fec_perf_int_t *tmp_pak; // size = L
-#endif
+    fec_perf_int_t *tmp_pak; // size = L or min(L, PERF_RX_BLOCK_SIZE)
 #endif
 #endif
 } fec_rx_state_t;
