@@ -28,12 +28,12 @@ has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-march=skylake),$
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-mtune=skylake),$(call check_option,-mtune=skylake-avx512),$(call check_option,-mtune=cascadelake))
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-target-cpu skylake),$(call check_option,-target-cpu skylake-avx512),$(call check_option,-target-cpu cascadelake))
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-tune-cpu skylake),$(call check_option,-tune-cpu skylake-avx512),$(call check_option,-tune-cpu cascadelake))
+jcc_erratum_cflags = -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
 ifneq ($(has_jcc_erratum),)
-ARCH_CFLAGS += -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
+ARCH_CFLAGS += $(foreach cflag,$(jcc_erratum_cflags),$(call check_cc_flag,$(cflag)))
 endif
 
 CFLAGS += -DPERF_DEBUG
-CFLAGS += $(ARCH_CFLAGS)
 
 # 32bit:
 # ARCH_CFLAGS += -m32
@@ -69,6 +69,8 @@ CFLAGS += $(ARCH_CFLAGS)
 OPT_CFLAGS := $(foreach cflag,$(OPT_CFLAGS),$(call check_cc_flag,$(cflag)))
 CFLAGS := $(foreach cflag,$(CFLAGS),$(call check_cc_flag,$(cflag)))
 OPT_LDFLAGS := $(foreach cflag,$(OPT_LDFLAGS),$(call check_cc_flag,$(cflag)))
+
+CFLAGS += $(ARCH_CFLAGS)
 
 TEST_PARAMS ?= 10000 2000 500
 
