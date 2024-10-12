@@ -116,7 +116,7 @@ cleanup:
 }
 #endif
 
-void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
+bool test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     // const unsigned int n = 1000;
     // const unsigned int k = 100;
     // const size_t pak_len = 1400 / sizeof(uint16_t);
@@ -132,6 +132,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     fec_rx_state_t rx_state;
     uint64_t start_time, end_time;
     fec_int_t *rx_dest_buf = NULL;
+    bool success = false;
 
 #ifdef _WIN32
     // we want accuracy
@@ -259,7 +260,9 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     }
 #else
     CHECK(memcmp(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t)) == 0);
-#endif    
+#endif
+
+    success = true;
 
 cleanup:
     if (paks != NULL) {
@@ -286,6 +289,8 @@ cleanup:
     if (inited_inv_cache) {
         fec_inv_cache_destroy(&inv_cache);
     }
+
+    return success;
 }
 
 int main(int argc, const char* argv[]) {
@@ -294,6 +299,6 @@ int main(int argc, const char* argv[]) {
         return 0;
     }
 
-    test_perf(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
-    return 0;
+    bool success = test_perf(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
+    return success ? 0 : 1;
 }

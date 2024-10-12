@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: compilers
       run: sudo apt-get install clang gcc-multilib
-    - name: adsf
+    - name: print cpu info
       run: cat /proc/cpuinfo
     - name: make
       run: make clean fec_test
