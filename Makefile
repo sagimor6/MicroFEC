@@ -21,7 +21,7 @@ OPT_CFLAGS += -flto -fuse-linker-plugin -ffat-lto-objects -flto=auto -flto-parti
 OPT_CFLAGS += -falign-loops=32
 OPT_LDFLAGS += -Wl,--gc-sections
 
-ARCH_CFLAGS += -march=skylake
+ARCH_CFLAGS += -march=native
 
 check_option = $(shell echo | $(CC) $(ARCH_CFLAGS) -v -E - 2>&1 >/dev/null | grep -E -e '\s$(1)\s')
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-march=skylake),$(call check_option,-march=skylake-avx512),$(call check_option,-march=cascadelake))
@@ -35,30 +35,30 @@ endif
 CFLAGS += $(ARCH_CFLAGS)
 
 # 32bit:
-# OPT_CFLAGS += -m32
+# ARCH_CFLAGS += -m32
 
 # pclmul:
-# OPT_CFLAGS += -mpclmul
+# ARCH_CFLAGS += -mpclmul
 # avx2:
-OPT_CFLAGS += -mno-pclmul -mavx2
+# ARCH_CFLAGS += -mno-pclmul -mavx2
 # avx:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mavx
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mavx
 # sse2:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -msse2
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -msse2
 # sse:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse
 # mmx:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx
 # 64bit:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx
 # 32bit:
-# OPT_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx -m32
+# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx -m32
 
 # aarch64 clmul:
-# OPT_CFLAGS += -march=armv8-a+crypto
+# ARCH_CFLAGS += -march=armv8-a+crypto
 
 # arm clmul:
-# OPT_CFLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
+# ARCH_CFLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
 
 
 
