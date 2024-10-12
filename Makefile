@@ -32,6 +32,7 @@ ifneq ($(has_jcc_erratum),)
 ARCH_CFLAGS += -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
 endif
 
+CFLAGS += -DPERF_DEBUG
 CFLAGS += $(ARCH_CFLAGS)
 
 # 32bit:
