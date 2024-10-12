@@ -20,6 +20,6 @@ jobs:
     - name: compilers
       run: sudo apt-get install clang gcc-multilib
     - name: adsf
-      run: echo asdfdfsdf
+      run: cat /proc/cpuinfo
     - name: make
-      run: make clean build/fec_test.elf
+      run: make clean fec_test

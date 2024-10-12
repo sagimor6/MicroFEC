@@ -17,10 +17,22 @@ DEBUG_CFLAGS += -g
 #DEBUG_CFLAGS += -fsanitize=undefined -fsanitize=address 
 
 OPT_CFLAGS += -ffunction-sections -fdata-sections -O3 -fvisibility=hidden
+OPT_CFLAGS += -flto -fuse-linker-plugin -ffat-lto-objects -flto=auto -flto-partition=one
 OPT_CFLAGS += -falign-loops=32
-OPT_CFLAGS += -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
-OPT_CFLAGS += -march=skylake
 OPT_LDFLAGS += -Wl,--gc-sections
+
+ARCH_CFLAGS += -march=skylake
+
+check_option = $(shell echo | $(CC) $(ARCH_CFLAGS) -v -E - 2>&1 >/dev/null | grep -E -e '\s$(1)\s')
+has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-march=skylake),$(call check_option,-march=skylake-avx512),$(call check_option,-march=cascadelake))
+has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-mtune=skylake),$(call check_option,-mtune=skylake-avx512),$(call check_option,-mtune=cascadelake))
+has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-target-cpu skylake),$(call check_option,-target-cpu skylake-avx512),$(call check_option,-target-cpu cascadelake))
+has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-tune-cpu skylake),$(call check_option,-tune-cpu skylake-avx512),$(call check_option,-tune-cpu cascadelake))
+ifneq ($(has_jcc_erratum),)
+ARCH_CFLAGS += -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
+endif
+
+CFLAGS += $(ARCH_CFLAGS)
 
 # 32bit:
 # OPT_CFLAGS += -m32
@@ -57,6 +69,8 @@ OPT_CFLAGS := $(foreach cflag,$(OPT_CFLAGS),$(call check_cc_flag,$(cflag)))
 CFLAGS := $(foreach cflag,$(CFLAGS),$(call check_cc_flag,$(cflag)))
 OPT_LDFLAGS := $(foreach cflag,$(OPT_LDFLAGS),$(call check_cc_flag,$(cflag)))
 
+TEST_PARAMS ?= 10000 2000 500
+
 BUILD = build
 
 .PHONY all:
@@ -64,7 +78,7 @@ all: $(BUILD)/libmicro_fec.so $(BUILD)/libmicro_fec.a fec_test
 
 .PHONY fec_test:
 fec_test: $(BUILD)/fec_test.elf
-	sudo $(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf 10000 2000 500
+	sudo $(VALGRIND) $(CROSS_RUNNER) $(BUILD)/fec_test.elf $(TEST_PARAMS)
 
 $(BUILD)/:
 	mkdir -p $@
