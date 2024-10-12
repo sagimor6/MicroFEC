@@ -21,7 +21,7 @@ OPT_CFLAGS += -flto -fuse-linker-plugin -ffat-lto-objects -flto=auto -flto-parti
 OPT_CFLAGS += -falign-loops=32
 OPT_LDFLAGS += -Wl,--gc-sections
 
-ARCH_CFLAGS += -march=native
+#ARCH_CFLAGS += -march=native
 
 check_option = $(shell echo | $(CC) $(ARCH_CFLAGS) -v -E - 2>&1 >/dev/null | grep -E -e '\s$(1)\s')
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-march=skylake),$(call check_option,-march=skylake-avx512),$(call check_option,-march=cascadelake))

@@ -21,5 +21,29 @@ jobs:
       run: sudo apt-get install clang gcc-multilib
     - name: print cpu info
       run: cat /proc/cpuinfo
-    - name: make
-      run: make clean fec_test
+    - name: test native
+      run: ARCH_CFLAGS="-march=native -mtune=native" make clean fec_test
+    - name: test 64bit pclmul
+      run: ARCH_CFLAGS="-march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test 64bit avx2
+      run: ARCH_CFLAGS="-march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test 64bit avx
+      run: ARCH_CFLAGS="-march=native -mtune=native -mno-pclmul -mno-avx2 -mavx" make clean fec_test
+    - name: test 64bit sse2
+      run: ARCH_CFLAGS="-march=native -mtune=native -mno-pclmul -mno-avx2 -mno-avx -msse2" make clean fec_test
+    - name: test 32bit pclmul
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mpclmul" make clean fec_test
+    - name: test 32bit avx2
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mavx2" make clean fec_test
+    - name: test 32bit avx
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mavx" make clean fec_test
+    - name: test 32bit sse2
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -msse2" make clean fec_test
+    - name: test 32bit sse
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse" make clean fec_test
+    - name: test 32bit mmx
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx" make clean fec_test
+    - name: test 32bit
+      run: ARCH_CFLAGS="-march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx" make clean fec_test
+    - name: test 64bit
+      run: ARCH_CFLAGS="-march=native -mtune=native -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx" make clean fec_test
