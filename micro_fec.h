@@ -42,17 +42,16 @@ typedef struct {
 
 
 #if !defined(_FEC_NO_OPT)
-
 #if ((defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__)) || \
     ((defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)) || /* TODO: FEAT_PMULL is needed in processor */ \
     (defined(__sparc__) && defined(__VIS) && __VIS >= 0x300) || \
-    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
+    (defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
     0
 #define FEC_HAS_CLMUL64
 #endif
 
 #if defined(FEC_HAS_CLMUL64) || \
-    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 32) || \
+    (defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 32) || \
     0
 #define FEC_HAS_CLMUL32
 #endif
@@ -61,7 +60,7 @@ typedef struct {
     ((defined(__aarch64__) || defined(__arm__)) && __ARM_NEON) || \
     (defined(__mips__) && __mips_msa) || \
     (defined(__powerpc__) && __ALTIVEC__) || \
-    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    (defined(__riscv) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
     0
 #define FEC_HAS_128_INT_VEC
 #endif
@@ -69,7 +68,7 @@ typedef struct {
 #if defined(FEC_HAS_128_INT_VEC) || \
     ((defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)) || \
     (defined(__sparc__) && defined(__VIS) && __VIS >= 0x100) || \
-    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 64/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    (defined(__riscv) && __riscv_vector && __riscv_v_min_vlen >= 64/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
     0
 #define FEC_HAS_64_INT_VEC
 #endif
@@ -79,7 +78,7 @@ typedef struct {
     defined(__aarch64__) || \
     defined(__mips64) || \
     defined(__powerpc64__) || \
-    (defined(__riscv__) && __riscv_xlen == 64) || \
+    (defined(__riscv) && __riscv_xlen == 64) || \
     0
 #define FEC_HAS_64BIT
 #endif

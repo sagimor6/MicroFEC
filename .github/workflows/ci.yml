@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: compilers
-      run: sudo apt-get install clang gcc-multilib qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armel-cross libc6-dev-armel-cross
+      run: sudo apt-get install clang lld gcc-multilib qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armhf-cross libc6-dev-armhf-cross libc6-dev-riscv64-cross libgcc-12-dev-riscv64-cross
     - name: print cpu info
       run: cat /proc/cpuinfo
     - name: test native
@@ -53,3 +53,8 @@ jobs:
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+nocrypto+simd" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test aarch64
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+nocrypto+nosimd" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test arm
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=armv7-unknown-linux-gnueabihf -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test riscv64
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=riscv64-unknown-linux -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
+    

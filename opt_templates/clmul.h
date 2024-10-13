@@ -19,7 +19,7 @@
 #elif defined(__sparc__) && defined(__VIS) && __VIS >= 0x300
 #define _poly_t uint64_t
 #define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_vis_xmulx((int64_t)(poly1), (int64_t)(poly2)))
-#elif defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc))
+#elif defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc))
 #if __riscv_xlen == 64
 #define _poly_t uint64_t
 #define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_64((poly1), (poly2)))
