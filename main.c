@@ -24,6 +24,21 @@
 
 #define CHECK(cond) if(!(cond)) { TRACE("check failed %d %s\n", __LINE__, #cond); goto cleanup; }
 
+#if defined(__x86_64__) && !defined(__SSE2__)
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %lu.%09lu\n", __diff / 1000000000, __diff % 1000000000); \
+    start_time = get_timestamp(); \
+} while(0)
+#else
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %f\n", __diff / ((double)1000000000)); \
+    start_time = get_timestamp(); \
+} while(0)
+#endif
 
 unsigned int rand_range(unsigned int n) {
     if (n > ((unsigned int)RAND_MAX + 1)) {
@@ -196,25 +211,19 @@ bool test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 #endif
     inited_rx_state = true;
 
-    end_time = get_timestamp();
-    TRACE("--total init time-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--total init time--");
 
     for (i = 0; i < n; i++) {
         CHECK(fec_tx_add_info_pak(&tx_state, &paks[i*pak_len], i) ==  FEC_STATUS_SUCCESS);
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_tx_add_info_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_tx_add_info_pak--");
 
     for (i = 0; i < k; i++) {
         CHECK(fec_tx_get_redundancy_pak(&tx_state, &inv_cache, i, &r_paks[i*pak_len]) == FEC_STATUS_SUCCESS);
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_tx_get_redundancy_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_tx_get_redundancy_pak--");
 
     for (i = 0; i < n; i++) {
         unsigned int idx = rcv_idxs[i];
@@ -243,15 +252,11 @@ bool test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
         }
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_rx_add_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_rx_add_pak--");
 
     CHECK(fec_rx_fill_missing_paks(&rx_state, &inv_cache) == FEC_STATUS_SUCCESS);
 
-    end_time = get_timestamp();
-    TRACE("--fec_rx_fill_missing_paks-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_rx_fill_missing_paks--");
 
 #ifndef FEC_USER_GIVEN_BUFFER
     uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
