@@ -13,7 +13,7 @@ static void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len
             fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
             fec_perf_int_t vec_val;
         } vec_val = {.val_arr = {
-#if defined (FEC_HAS_CLMUL32) || defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
+#if defined(FEC_HAS_64_INT_VEC) || ((__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) == (defined (FEC_HAS_CLMUL32) || !defined(FEC_HAS_64BIT)))
             [0] = INIT_FUNC_READ_INPUT(i)
 #else
             [(sizeof(fec_perf_int_t)/(sizeof(fec_int_t))) - 1] = INIT_FUNC_READ_INPUT(i)
@@ -182,10 +182,17 @@ static void __attribute__((hot)) __attribute__((noinline)) PERF_DEBUG_ATTRS FMA_
     
     #pragma GCC unroll 4
     for (j = 0; j < 4; j++) {
-        _a[j] = a * ((1ULL<<((16+1)*(4*j+0) - 64*j)) + (1ULL<<((16+1)*(4*j+1) - 64*j)) + (1ULL<<((16+1)*(4*j+2) - 64*j)) + (1ULL<<((16+1)*(4*j+3) - 64*j)));
-        _a[j] >>= (16-1);
-        _a[j] &= (1ULL<<(16*0)) | (1ULL<<(16*1)) | (1ULL<<(16*2)) | (1ULL<<(16*3));
-        _a[j] *= (1<<16) - 1;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        int j_endian = j;
+#else
+        int j_endian = 3 - j;
+#endif
+        uint64_t val;
+        val = a * ((1ULL<<((16+1)*(4*j_endian+0) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+1) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+2) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+3) - 64*j_endian)));
+        val >>= (16-1);
+        val &= (1ULL<<(16*0)) | (1ULL<<(16*1)) | (1ULL<<(16*2)) | (1ULL<<(16*3));
+        val *= (1<<16) - 1;
+        _a[j] = val;
     }
 
     for (i = 0; i < len; i++) {
@@ -202,7 +209,12 @@ static void __attribute__((hot)) __attribute__((noinline)) PERF_DEBUG_ATTRS FMA_
     
     #pragma GCC unroll 8
     for (j = 0; j < 8; j++) {
-        _a[j] = ((uint16_t)(((int16_t)(a << (16 - 1 - (j*2 + 0)))) >> 15)) | (((uint32_t)((uint16_t)(((int16_t)(a << (16 - 1 - (j*2 + 1)))) >> 15))) << 16);
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        int j_endian = j;
+#else
+        int j_endian = 7 - j;
+#endif
+        _a[j] = ((uint16_t)(((int16_t)(a << (16 - 1 - (j_endian*2 + 0)))) >> 15)) | (((uint32_t)((uint16_t)(((int16_t)(a << (16 - 1 - (j_endian*2 + 1)))) >> 15))) << 16);
     }
 
     for (i = 0; i < len; i++) {
@@ -263,8 +275,13 @@ static inline void NORM_FUNC_NAME(const fec_perf_int_t* restrict perf_col, LEN_P
         WRITE_OUTPUT(i, _POLY_EXTRACT(_c, uint16_t, 0));
     }
 #elif defined(FEC_HAS_128_INT_VEC)
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     u32x8 shifts1 = {0, 2, 4, 6, 8, 10, 12, 14};
     u32x8 shifts2 = {1, 3, 5, 7, 9, 11, 13, 15};
+#else
+    u32x8 shifts2 = {0, 2, 4, 6, 8, 10, 12, 14};
+    u32x8 shifts1 = {1, 3, 5, 7, 9, 11, 13, 15};
+#endif
 
     for (i = 0; i < len; i++) {
         u16x16 res = perf_col[i];
@@ -286,8 +303,16 @@ static inline void NORM_FUNC_NAME(const fec_perf_int_t* restrict perf_col, LEN_P
         u32x4 res11 = res10 ^ my_mm_shuffle_epi32(res10, 1, 2, 3, 0);
         u32x4 res12 = res11 ^ my_mm_shuffle_epi32(res11, 2, 3, 0, 1);
 
-        WRITE_OUTPUT(i, ((u16x8)(res6 ^ res9 ^ res12))[0]);
+        u32x4 res13 = (u32x4)(res6 ^ res9 ^ res12);
 
+        fec_int_t res14;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        res14 = ((u16x8)res13)[0];
+#else
+        res14 = ((u16x8)res13)[1];
+#endif
+
+        WRITE_OUTPUT(i, res14);
     }
 #else
     int j;
@@ -296,7 +321,7 @@ static inline void NORM_FUNC_NAME(const fec_perf_int_t* restrict perf_col, LEN_P
         uint32_t res = 0;
         for (j = 0; j < 16; j++) {
             res ^= ((uint32_t)(((const uint16_t*)perf_col)[i*16 + j])) <<
-#if defined(FEC_HAS_64_INT_VEC) || !defined(FEC_HAS_64BIT)
+#if defined(FEC_HAS_64_INT_VEC) || ((__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) == (!defined(FEC_HAS_64BIT)))
             j
 #else
             (16 - 1 - j)

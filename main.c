@@ -197,6 +197,26 @@ bool test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     memcpy(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t));
 #endif
 
+#ifdef FEC_HAS_CLMUL64
+    TRACE("FEC_HAS_CLMUL64 ");
+#endif
+#ifdef FEC_HAS_CLMUL32
+    TRACE("FEC_HAS_CLMUL32 ");
+#endif
+#ifdef FEC_HAS_128_INT_VEC
+    TRACE("FEC_HAS_128_INT_VEC ");
+#endif
+#ifdef FEC_HAS_64_INT_VEC
+    TRACE("FEC_HAS_64_INT_VEC ");
+#endif
+#ifdef FEC_HAS_64BIT
+    TRACE("FEC_HAS_64BIT ");
+#endif
+#ifdef FEC_HAS_32BIT
+    TRACE("FEC_HAS_32BIT ");
+#endif
+    TRACE("\n");
+
     TRACE("--0--\n");
     start_time = get_timestamp();
 

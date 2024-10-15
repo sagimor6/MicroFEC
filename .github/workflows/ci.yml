@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: compilers
-      run: sudo apt-get install clang lld gcc-multilib qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armhf-cross libc6-dev-armhf-cross libc6-dev-riscv64-cross libgcc-12-dev-riscv64-cross
+      run: sudo apt-get install clang lld gcc-multilib qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armhf-cross libc6-dev-armhf-cross gcc-12-arm-linux-gnueabihf libc6-dev-riscv64-cross libgcc-12-dev-riscv64-cross libc6-dev-powerpc-cross libgcc-12-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-12-dev-ppc64el-cross gcc-12-powerpc64-linux-gnu
     - name: print cpu info
       run: cat /proc/cpuinfo
     - name: test native
@@ -55,6 +55,25 @@ jobs:
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+nocrypto+nosimd" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test arm
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=armv7-unknown-linux-gnueabihf -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32 clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32 simd
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test riscv64
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=riscv64-unknown-linux -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
-    
+    - name: compile riscv64 vector
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=riscv64-unknown-linux -fuse-ld=lld -march=rv64imdv" make clean build/fec_test.elf
+    - name: compile riscv64 clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=riscv64-unknown-linux -fuse-ld=lld -march=rv64imdzbc" make clean build/fec_test.elf
+    - name: test powerpc big
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 little, simd altivec
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=ppc64-unknown-linux -fuse-ld=lld -mlittle-endian -m64 -mcpu=powerpc64le -maltivec" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64le" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 little
+      run: ARCH_CFLAGS="-DPERF_DEBUG --target=ppc64-unknown-linux -fuse-ld=lld -mlittle-endian -m64 -mcpu=powerpc64le -mno-altivec" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64le" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 big, simd altivec
+      run: ARCH_CFLAGS="-DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -maltivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 big
+      run: ARCH_CFLAGS="-DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -mno-altivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
