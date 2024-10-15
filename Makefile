@@ -33,7 +33,7 @@ ifneq ($(has_jcc_erratum),)
 ARCH_CFLAGS += $(foreach cflag,$(jcc_erratum_cflags),$(call check_cc_flag,$(cflag)))
 endif
 
-CFLAGS += -DPERF_DEBUG
+# CFLAGS += -DPERF_DEBUG
 
 # 32bit:
 # ARCH_CFLAGS += -m32
