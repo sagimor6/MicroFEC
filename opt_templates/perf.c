@@ -189,9 +189,8 @@ static void __attribute__((hot)) __attribute__((noinline)) PERF_DEBUG_ATTRS FMA_
 #endif
         uint64_t val;
         val = a * ((1ULL<<((16+1)*(4*j_endian+0) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+1) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+2) - 64*j_endian)) + (1ULL<<((16+1)*(4*j_endian+3) - 64*j_endian)));
-        val >>= (16-1);
-        val &= (1ULL<<(16*0)) | (1ULL<<(16*1)) | (1ULL<<(16*2)) | (1ULL<<(16*3));
-        val *= (1<<16) - 1;
+        val &= (((1ULL<<(16*0)) | (1ULL<<(16*1)) | (1ULL<<(16*2)) | (1ULL<<(16*3))) << (16 - 1));
+        val = (val << 1) - (val >> (16 - 1));
         _a[j] = val;
     }
 
