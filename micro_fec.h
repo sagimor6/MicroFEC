@@ -43,7 +43,7 @@ typedef struct {
 
 #if !defined(_FEC_NO_OPT)
 #if ((defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__)) || \
-    ((defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)) || /* TODO: FEAT_PMULL is needed in processor */ \
+    ((defined(__aarch64__) || defined(__arm__)) && (defined(__ARM_FEATURE_AES) || defined(__ARM_FEATURE_CRYPTO))) || /* TODO: FEAT_PMULL is needed in processor */ \
     (defined(__sparc__) && defined(__VIS) && __VIS >= 0x300) || \
     (defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
     0

@@ -12,7 +12,7 @@
 #define _POLY_2VAL(val1, val2) ((_poly_t){(val1), (val2), 0, 0})
 #define _POLY_EXTRACT(poly_val, typ, idx) (((typ __attribute__((vector_size (16))))(poly_val))[idx])
 #define _POLY_VEC_SHIFT(poly_val, shift) ((poly_val) >> shift)
-#elif (defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)
+#elif (defined(__aarch64__) || defined(__arm__)) && (defined(__ARM_FEATURE_AES) || defined(__ARM_FEATURE_CRYPTO))
 // TODO: FEAT_PMULL is needed in processor
 #define _poly_t poly64_t
 #define _POLY_CLMUL(poly1, poly2) ((_poly_t)vmull_p64((poly1), (poly2)))
