@@ -56,11 +56,11 @@ jobs:
     - name: test arm
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=armv7-unknown-linux-gnueabihf -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test aarch32 clmul
-      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test aarch32 simd
-      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test aarch32
-      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test riscv64
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=riscv64-unknown-linux -fuse-ld=lld" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: compile riscv64 vector
