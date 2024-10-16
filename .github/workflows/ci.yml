@@ -77,3 +77,73 @@ jobs:
       run: ARCH_CFLAGS="-DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -maltivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc64 big
       run: ARCH_CFLAGS="-DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -mno-altivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_TX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_TX_OPT _FEC_NO_RX_OPT 
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_TX_OPT -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_OPT 
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_NO_TX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_TX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_NO_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -D_FEC_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP avx2
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_TX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_DO_ENDIAN_SWAP
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_DO_ENDIAN_SWAP _FEC_NO_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER avx2
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER _FEC_NO_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER FEC_DO_ENDIAN_SWAP
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native" make clean fec_test
+    - name: test PERF_TX_BLOCK_SIZE clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DPERF_TX_BLOCK_SIZE=256 -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test PERF_TX_BLOCK_SIZE avx2
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DPERF_TX_BLOCK_SIZE=256 -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test PERF_RX_BLOCK_SIZE clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test PERF_RX_BLOCK_SIZE avx2
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test big endian PERF_RX_BLOCK_SIZE PERF_TX_BLOCK_SIZE
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -DPERF_TX_BLOCK_SIZE=256 --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    
+    - name: test FEC_MIN_MEM
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native" make clean fec_test
+    - name: test FEC_MIN_MEM clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_MIN_MEM avx2
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_MIN_MEM _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_MIN_MEM _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -D_FEC_NO_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM PERF_RX_BLOCK_SIZE
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native" make clean fec_test
+    - name: test big endian FEC_MIN_MEM PERF_RX_BLOCK_SIZE
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DPERF_RX_BLOCK_SIZE=256 --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER _FEC_NO_RX_OPT
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER PERF_RX_BLOCK_SIZE
+      run: ARCH_CFLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native" make clean fec_test
+    
