@@ -22,10 +22,36 @@
 #elif defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc))
 #if __riscv_xlen == 64
 #define _poly_t uint64_t
-#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_64((poly1), (poly2)))
+#if (__GNUC__ >= 14) || (__clang_major__ >= 18)
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__riscv_clmul_64((poly1), (poly2)))
+#else
+#define _POLY_CLMUL(poly1, poly2) ({ \
+    _poly_t _out_poly; \
+    asm inline ( \
+        "clmul %0, %1, %2" \
+        : "=r"(_out_poly) \
+        : "r"((_poly_t)poly1), "r"((_poly_t)poly2) \
+        : \
+    ); \
+    _out_poly; \
+    })
+#endif
 #elif __riscv_xlen == 32
 #define _poly_t uint32_t
-#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__builtin_riscv_clmul_32((poly1), (poly2)))
+#if (__GNUC__ >= 14) || (__clang_major__ >= 18)
+#define _POLY_CLMUL(poly1, poly2) ((_poly_t)__riscv_clmul_32((poly1), (poly2)))
+#else
+#define _POLY_CLMUL(poly1, poly2) ({ \
+    _poly_t _out_poly; \
+    asm inline ( \
+        "clmul %0, %1, %2" \
+        : "=r"(_out_poly) \
+        : "r"((_poly_t)poly1), "r"((_poly_t)poly2) \
+        : \
+    ); \
+    _out_poly; \
+    })
+#endif
 #endif
 #endif
 

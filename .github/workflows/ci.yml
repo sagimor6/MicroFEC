@@ -63,10 +63,10 @@ jobs:
       run: ARCH_CFLAGS="-DPERF_DEBUG -march=armv8-a -mfpu=fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test riscv64
       run: ARCH_CFLAGS="-DPERF_DEBUG" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
-    - name: compile riscv64 vector
-      run: ARCH_CFLAGS="-DPERF_DEBUG -march=rv64imdv" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-12" make clean build/fec_test.elf
-    #- name: compile riscv64 clmul
-    #  run: ARCH_CFLAGS="-DPERF_DEBUG -march=rv64imdzbc" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-12" make clean build/fec_test.elf
+    - name: test riscv64 vector
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=rv64imdv" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test riscv64 clmul
+      run: ARCH_CFLAGS="-DPERF_DEBUG -march=rv64imdzbc" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-12" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc big
       run: ARCH_CFLAGS="-DPERF_DEBUG --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_FLAGS="-static" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc64 little, simd altivec

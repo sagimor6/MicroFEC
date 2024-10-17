@@ -53,6 +53,10 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #include <immintrin.h>
 #elif defined(__arm__) || defined(__aarch64__)
 #include <arm_neon.h>
+#elif defined(__riscv)
+#if (__GNUC__ >= 14) || (__clang_major__ >= 18)
+#include <riscv_bitmanip.h>
+#endif
 #endif
 
 #if defined(__AVX2__)
