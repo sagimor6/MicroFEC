@@ -15,6 +15,22 @@
 #else
 #include <time.h>
 #endif
+
+#if defined(__x86_64__) && !defined(__SSE2__)
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %lu.%09lu\n", __diff / 1000000000, __diff % 1000000000); \
+    start_time = get_timestamp(); \
+} while(0)
+#else
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %f\n", __diff / ((double)1000000000)); \
+    start_time = get_timestamp(); \
+} while(0)
+#endif
 #endif
 
 #include "micro_fec.h"
@@ -781,9 +797,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.1--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.1---");
 #endif
 
 #ifdef FEC_MIN_MEM
@@ -814,9 +828,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.2--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.2---");
 #endif
 
     for (i = 0; i < num_x_present; i++) {
@@ -843,9 +855,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.3--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.3---");
 #endif
 
 #if !defined(FEC_MIN_MEM) || (!defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT))
@@ -1074,9 +1084,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #endif
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.4--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.4---");
 #endif
 
 #ifndef FEC_MIN_MEM
@@ -1107,9 +1115,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.5--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.5---");
 #endif
 
     for (i = 0; i < num_y_present; i++) {
@@ -1130,9 +1136,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.6--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.6---");
 #endif
 
     for (i = 0; i < num_y_missing; i++) {
@@ -1141,9 +1145,7 @@ fec_status_t fec_rx_fill_missing_paks(const fec_rx_state_t *rx_state, const fec_
 #endif
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.7--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.7---");
 #endif
 
 #ifdef FEC_DO_ENDIAN_SWAP
@@ -1185,9 +1187,7 @@ reorder_packets:
     }
 
 #ifdef PERF_DEBUG
-    end_time = get_timestamp();
-    printf("---1.8--- %f\n", (end_time - start_time)/((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("---1.8---");
 #endif
 
     return FEC_STATUS_SUCCESS;
