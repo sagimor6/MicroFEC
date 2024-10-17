@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: compilers
-      run: sudo apt-get install clang lld gcc-multilib-x86-64-linux-gnux32 qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armhf-cross libc6-dev-armhf-cross gcc-12-arm-linux-gnueabihf gcc-12-riscv64-linux-gnu libc6-dev-powerpc-cross libgcc-12-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-12-dev-ppc64el-cross gcc-12-powerpc64-linux-gnu
+      run: sudo apt-get install -U clang lld gcc-multilib-x86-64-linux-gnux32 qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross libgcc-12-dev-armhf-cross libc6-dev-armhf-cross gcc-12-arm-linux-gnueabihf gcc-12-riscv64-linux-gnu libc6-dev-powerpc-cross libgcc-12-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-12-dev-ppc64el-cross gcc-12-powerpc64-linux-gnu
     - name: print cpu info
       run: cat /proc/cpuinfo && qemu-riscv64 --version
     - name: test native
