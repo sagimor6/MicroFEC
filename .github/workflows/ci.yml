@@ -20,7 +20,7 @@ jobs:
     - name: compilers
       run: sudo apt-get install clang lld gcc-multilib-x86-64-linux-gnux32 qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross gcc-12-arm-linux-gnueabihf gcc-12-riscv64-linux-gnu libc6-dev-powerpc-cross libgcc-12-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-12-dev-ppc64el-cross gcc-12-powerpc64-linux-gnu gcc-14-sparc64-linux-gnu
     - name: latest qemu
-      run: mkdir qemu && wget -O - https://archlinux.org/packages/extra/x86_64/qemu-user-static/download/ | tar -C qemu --zstd -x
+      run: mkdir qemu && wget -q -O - https://archlinux.org/packages/extra/x86_64/qemu-user-static/download/ | tar -C qemu --zstd -x
     - name: print cpu info
       run: cat /proc/cpuinfo && qemu-riscv64 --version
     - name: test native
@@ -74,7 +74,7 @@ jobs:
     - name: test sparc64 simd (vis1)
       run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=ultrasparc" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-sparc64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test sparc64 clmul (vis3)
-      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=niagara3 -fvect-cost-model=very-cheap" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="./qemu/usr/bin/qemu-sparc64-static" TEST_PARAMS="1000 200 500" make clean fec_test
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=niagara3 -fvect-cost-model=very-cheap" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="./qemu/usr/bin/qemu-sparc64-static -cpu Sun-UltraSparc-T2,+vis3" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc big
       run: CROSS_FLAGS="-static -DPERF_DEBUG --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc64 little, simd altivec

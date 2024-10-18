@@ -13,7 +13,7 @@ static void INIT_FUNC_NAME(fec_perf_int_t* restrict perf_col, LEN_PARAM_TYPE len
             fec_int_t val_arr[sizeof(fec_perf_int_t)/(sizeof(fec_int_t))];
             fec_perf_int_t vec_val;
         } vec_val = {.val_arr = {
-#if defined(FEC_HAS_64_INT_VEC) || ((__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) == (defined (FEC_HAS_CLMUL32) || !defined(FEC_HAS_64BIT)))
+#if (!defined(FEC_HAS_CLMUL32) && defined(FEC_HAS_64_INT_VEC)) || ((__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) == (defined(FEC_HAS_CLMUL32) || !defined(FEC_HAS_64BIT)))
             [0] = INIT_FUNC_READ_INPUT(i)
 #else
             [(sizeof(fec_perf_int_t)/(sizeof(fec_int_t))) - 1] = INIT_FUNC_READ_INPUT(i)
