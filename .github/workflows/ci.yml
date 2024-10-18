@@ -74,7 +74,7 @@ jobs:
     - name: test sparc64 simd (vis1)
       run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=ultrasparc" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-sparc64" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test sparc64 clmul (vis3)
-      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=niagara3 -fvect-cost-model=very-cheap" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="./qemu/usr/bin/qemu-sparc64" TEST_PARAMS="1000 200 500" make clean fec_test
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=niagara3 -fvect-cost-model=very-cheap" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="./qemu/usr/bin/qemu-sparc64-static" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc big
       run: CROSS_FLAGS="-static -DPERF_DEBUG --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
     - name: test powerpc64 little, simd altivec
