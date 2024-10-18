@@ -24,6 +24,21 @@
 
 #define CHECK(cond) if(!(cond)) { TRACE("check failed %d %s\n", __LINE__, #cond); goto cleanup; }
 
+#if defined(__x86_64__) && !defined(__SSE2__)
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %lu.%09lu\n", __diff / 1000000000, __diff % 1000000000); \
+    start_time = get_timestamp(); \
+} while(0)
+#else
+#define PRINT_TS_DIFF(str) do { \
+    end_time = get_timestamp(); \
+    uint64_t __diff = end_time - start_time; \
+    printf(str " %f\n", __diff / ((double)1000000000)); \
+    start_time = get_timestamp(); \
+} while(0)
+#endif
 
 unsigned int rand_range(unsigned int n) {
     if (n > ((unsigned int)RAND_MAX + 1)) {
@@ -116,7 +131,7 @@ cleanup:
 }
 #endif
 
-void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
+bool test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     // const unsigned int n = 1000;
     // const unsigned int k = 100;
     // const size_t pak_len = 1400 / sizeof(uint16_t);
@@ -132,6 +147,7 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     fec_rx_state_t rx_state;
     uint64_t start_time, end_time;
     fec_int_t *rx_dest_buf = NULL;
+    bool success = false;
 
 #ifdef _WIN32
     // we want accuracy
@@ -181,6 +197,26 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     memcpy(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t));
 #endif
 
+#ifdef FEC_HAS_CLMUL64
+    TRACE("FEC_HAS_CLMUL64 ");
+#endif
+#ifdef FEC_HAS_CLMUL32
+    TRACE("FEC_HAS_CLMUL32 ");
+#endif
+#ifdef FEC_HAS_128_INT_VEC
+    TRACE("FEC_HAS_128_INT_VEC ");
+#endif
+#ifdef FEC_HAS_64_INT_VEC
+    TRACE("FEC_HAS_64_INT_VEC ");
+#endif
+#ifdef FEC_HAS_64BIT
+    TRACE("FEC_HAS_64BIT ");
+#endif
+#ifdef FEC_HAS_32BIT
+    TRACE("FEC_HAS_32BIT ");
+#endif
+    TRACE("\n");
+
     TRACE("--0--\n");
     start_time = get_timestamp();
 
@@ -195,25 +231,19 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
 #endif
     inited_rx_state = true;
 
-    end_time = get_timestamp();
-    TRACE("--total init time-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--total init time--");
 
     for (i = 0; i < n; i++) {
         CHECK(fec_tx_add_info_pak(&tx_state, &paks[i*pak_len], i) ==  FEC_STATUS_SUCCESS);
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_tx_add_info_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_tx_add_info_pak--");
 
     for (i = 0; i < k; i++) {
         CHECK(fec_tx_get_redundancy_pak(&tx_state, &inv_cache, i, &r_paks[i*pak_len]) == FEC_STATUS_SUCCESS);
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_tx_get_redundancy_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_tx_get_redundancy_pak--");
 
     for (i = 0; i < n; i++) {
         unsigned int idx = rcv_idxs[i];
@@ -242,15 +272,11 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
         }
     }
 
-    end_time = get_timestamp();
-    TRACE("--fec_rx_add_pak-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_rx_add_pak--");
 
     CHECK(fec_rx_fill_missing_paks(&rx_state, &inv_cache) == FEC_STATUS_SUCCESS);
 
-    end_time = get_timestamp();
-    TRACE("--fec_rx_fill_missing_paks-- %f\n", (end_time - start_time) / ((double)1000000000));
-    start_time = get_timestamp();
+    PRINT_TS_DIFF("--fec_rx_fill_missing_paks--");
 
 #ifndef FEC_USER_GIVEN_BUFFER
     uint16_t** res = (uint16_t**)fec_rx_get_info_paks(&rx_state);
@@ -259,7 +285,9 @@ void test_perf(unsigned int n, unsigned int k, unsigned int pak_len) {
     }
 #else
     CHECK(memcmp(rx_dest_buf, paks, n * pak_len * sizeof(uint16_t)) == 0);
-#endif    
+#endif
+
+    success = true;
 
 cleanup:
     if (paks != NULL) {
@@ -286,6 +314,8 @@ cleanup:
     if (inited_inv_cache) {
         fec_inv_cache_destroy(&inv_cache);
     }
+
+    return success;
 }
 
 int main(int argc, const char* argv[]) {
@@ -294,6 +324,6 @@ int main(int argc, const char* argv[]) {
         return 0;
     }
 
-    test_perf(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
-    return 0;
+    bool success = test_perf(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
+    return success ? 0 : 1;
 }
