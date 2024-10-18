@@ -8,19 +8,16 @@
 typedef uint16_t fec_int_t;
 typedef uint32_t fec_idx_t;
 
-#ifdef FEC_MIN_MEM
-#undef FEC_MIN_MEM
-#endif
-#ifdef FEC_LARGE_K
-#undef FEC_LARGE_K
-#endif
-
-#define FEC_LARGE_K
-#define FEC_MIN_MEM
+//#define _FEC_NO_OPT
+//#define _FEC_NO_TX_OPT
+//#define _FEC_NO_RX_OPT
+//#define FEC_MIN_MEM
 //#define FEC_USER_GIVEN_BUFFER
 //#define FEC_DO_ENDIAN_SWAP
+//#define PERF_TX_BLOCK_SIZE 256
+//#define PERF_RX_BLOCK_SIZE 256
 
-typedef fec_int_t __attribute__((aligned(1))) unaligend_fec_int_t;
+typedef fec_int_t __attribute__((aligned(1))) unaligned_fec_int_t;
 
 typedef enum {
     FEC_STATUS_SUCCESS,
@@ -45,17 +42,16 @@ typedef struct {
 
 
 #if !defined(_FEC_NO_OPT)
-
 #if ((defined(__x86_64__) || defined(__i386__)) && defined(__PCLMUL__)) || \
-    ((defined(__aarch64__) || defined(__arm__)) && defined(__ARM_FEATURE_AES)) || /* TODO: FEAT_PMULL is needed in processor */ \
+    ((defined(__aarch64__) || defined(__arm__)) && (defined(__ARM_FEATURE_AES) || defined(__ARM_FEATURE_CRYPTO))) || /* TODO: FEAT_PMULL is needed in processor */ \
     (defined(__sparc__) && defined(__VIS) && __VIS >= 0x300) || \
-    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
+    (defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 64) || \
     0
 #define FEC_HAS_CLMUL64
 #endif
 
 #if defined(FEC_HAS_CLMUL64) || \
-    (defined(__riscv__) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 32) || \
+    (defined(__riscv) && (defined(__riscv_zbc) || defined(__riscv_zbkc)) && __riscv_xlen == 32) || \
     0
 #define FEC_HAS_CLMUL32
 #endif
@@ -64,7 +60,7 @@ typedef struct {
     ((defined(__aarch64__) || defined(__arm__)) && __ARM_NEON) || \
     (defined(__mips__) && __mips_msa) || \
     (defined(__powerpc__) && __ALTIVEC__) || \
-    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    (defined(__riscv) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
     0
 #define FEC_HAS_128_INT_VEC
 #endif
@@ -72,7 +68,7 @@ typedef struct {
 #if defined(FEC_HAS_128_INT_VEC) || \
     ((defined(__x86_64__) || defined(__i386__)) && defined(__MMX__)) || \
     (defined(__sparc__) && defined(__VIS) && __VIS >= 0x100) || \
-    (defined(__riscv__) && __riscv_vector && __riscv_v_min_vlen >= 64/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
+    (defined(__riscv) && __riscv_vector && __riscv_v_min_vlen >= 64/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
     0
 #define FEC_HAS_64_INT_VEC
 #endif
@@ -82,7 +78,7 @@ typedef struct {
     defined(__aarch64__) || \
     defined(__mips64) || \
     defined(__powerpc64__) || \
-    (defined(__riscv__) && __riscv_xlen == 64) || \
+    (defined(__riscv) && __riscv_xlen == 64) || \
     0
 #define FEC_HAS_64BIT
 #endif
@@ -137,13 +133,11 @@ typedef struct {
     fec_idx_t n;
     size_t pak_len;
 
-    const unaligend_fec_int_t** paks; // size = n
+    const unaligned_fec_int_t** paks; // size = n
 #if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_TX_OPT)
-    fec_perf_int_t* tmp_pak;
+    fec_perf_int_t* tmp_pak; // size = L or min(L, PERF_TX_BLOCK_SIZE)
 #endif
 } fec_tx_state_t;
-
-//#define FEC_USER_GIVEN_BUFFER
 
 typedef struct {
     fec_idx_t n;
@@ -152,46 +146,36 @@ typedef struct {
 
     fec_int_t max_x; // maximum k - 1
 
-#ifndef FEC_LARGE_K
-    unaligend_fec_int_t** info_paks; // size = n
-    unaligend_fec_int_t** redundancy_paks; // size = real k
-    fec_int_t *present_x; // size = k - 1
-#else
     uint8_t* received_paks_bitmap; // size = (n + real k)/8
 #ifndef FEC_USER_GIVEN_BUFFER
-    unaligend_fec_int_t** pak_arr; // size = n
-    unaligend_fec_int_t* ones_pak;
+    unaligned_fec_int_t** pak_arr; // size = n
+    unaligned_fec_int_t* ones_pak;
 #else
-    unaligend_fec_int_t *pak_buffer; // given by user (size = n*pak_len)
+    unaligned_fec_int_t *pak_buffer; // given by user (size = n*pak_len)
     fec_int_t ones_pak_idx;
     bool has_one_pak; // TODO: actually x_i cannot be 0, cause n > 0, so ones_pak_idx can point to elem in pak_xy_arr with 0.
     // TODO: we also have this info from the bitfield
 #endif
     fec_int_t *pak_xy_arr; // size = n
-#endif
     fec_idx_t num_info;
     fec_idx_t num_redundant;
 
     fec_int_t *missing_y; // size = k
 
 #ifdef FEC_MIN_MEM
-    // min mem uses this:
-#if defined(FEC_LARGE_K) && !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
-    fec_perf_int_t *tmp_recovered_ints; // size = k
-#else
+#if defined(_FEC_NO_OPT) || defined(_FEC_NO_RX_OPT)
     fec_int_t *tmp_recovered_ints; // size = k
+#elif defined(PERF_RX_BLOCK_SIZE)
+    fec_int_t *tmp_recovered_ints; // size = k
+    fec_perf_int_t *tmp_recovered_block; // size = min(k, PERF_RX_BLOCK_SIZE)
+#else
+    fec_perf_int_t *tmp_recovered_ints; // size = k
 #endif
 #else
-    // regular uses this:
-    fec_int_t *pi_xy_div_xx; // size = k - 1
-    fec_int_t *pi_yx_div_yy; // size = k
-
-    fec_int_t *present_y; // size = n - 1
-
-    fec_int_t *pi_ycomp_y_div_ycomp_x; // size = n - 1
-
-    fec_int_t *tmp_vec_info; // size = n - 1
-    fec_int_t *tmp_vec_redundancy; // size = k - 1
+    fec_int_t *pak_multiplier; // size = n
+#if !defined(_FEC_NO_OPT) && !defined(_FEC_NO_RX_OPT)
+    fec_perf_int_t *tmp_pak; // size = L or min(L, PERF_RX_BLOCK_SIZE)
+#endif
 #endif
 } fec_rx_state_t;
 
@@ -208,6 +192,7 @@ EXPORT void fec_inv_cache_destroy(fec_inv_cache_t *inv_cache);
 EXPORT fec_status_t fec_tx_init(fec_tx_state_t *tx_state, fec_idx_t n, size_t pak_len);
 EXPORT fec_status_t fec_tx_add_info_pak(fec_tx_state_t *tx_state, const void* pak, fec_idx_t idx);
 EXPORT fec_status_t fec_tx_get_redundancy_pak(const fec_tx_state_t *tx_state, const fec_inv_cache_t *inv_cache, fec_idx_t idx, void *pak);
+EXPORT void fec_tx_reset(fec_tx_state_t *tx_state);
 EXPORT void fec_tx_destroy(fec_tx_state_t *tx_state);
 
 #ifndef FEC_USER_GIVEN_BUFFER

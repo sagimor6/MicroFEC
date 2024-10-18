@@ -2,18 +2,156 @@ name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - '**'
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - '**'
   workflow_dispatch:
     
 
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
-    - name: make
-      run: make clean build/fec_test.elf
+    - name: compilers
+      run: sudo apt-get install clang lld gcc-multilib-x86-64-linux-gnux32 qemu-user libgcc-14-dev-arm64-cross libc6-dev-arm64-cross gcc-14-arm-linux-gnueabihf gcc-14-riscv64-linux-gnu libc6-dev-powerpc-cross libgcc-14-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-14-dev-ppc64el-cross gcc-14-powerpc64-linux-gnu gcc-14-sparc64-linux-gnu
+    - name: latest qemu
+      run: mkdir qemu && wget -q -O - https://archlinux.org/packages/extra/x86_64/qemu-user-static/download/ | tar -C qemu --zstd -x
+    - name: print cpu info
+      run: cat /proc/cpuinfo && qemu-riscv64 --version
+    - name: test native
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native" make clean fec_test
+    - name: test 64bit clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test 64bit avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test 64bit avx
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -mno-pclmul -mno-avx2 -mavx" make clean fec_test
+    - name: test 64bit sse2
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -mno-pclmul -mno-avx2 -mno-avx -msse2" make clean fec_test
+    - name: test 32bit clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mpclmul" make clean fec_test
+    - name: test 32bit avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mavx2" make clean fec_test
+    - name: test 32bit avx
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mavx" make clean fec_test
+    - name: test 32bit sse2
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -msse2" make clean fec_test
+    - name: test 32bit sse
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse" make clean fec_test
+    - name: test 32bit mmx
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx" make clean fec_test
+    - name: test 32bit
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -m32 -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx" make clean fec_test
+    - name: test 64bit
+      run: CROSS_FLAGS="-DPERF_DEBUG -march=native -mtune=native -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx" make clean fec_test
+    - name: test aarch64 clmul
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+crypto" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch64 simd
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+nocrypto+simd" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch64
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=aarch64-unknown-linux -fuse-ld=lld -march=armv8-a+nocrypto+nosimd" CROSS_RUNNER="qemu-aarch64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test arm
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=armv7-unknown-linux-gnueabihf -fuse-ld=lld" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32 clmul
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32 simd
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -march=armv8-a -mfpu=neon-fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test aarch32
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -march=armv8-a -mfpu=fp-armv8" CROSS_PREFIX="arm-linux-gnueabihf-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-arm" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test riscv64
+      run: CROSS_FLAGS="-static -DPERF_DEBUG" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test riscv64 vector
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -march=rv64imdv" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test riscv64 clmul
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -march=rv64imdzbc" CROSS_PREFIX="riscv64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-riscv64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test sparc64
+      run: CROSS_FLAGS="-static -DPERF_DEBUG" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-sparc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test sparc64 simd (vis1)
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=ultrasparc" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-sparc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test sparc64 clmul (vis3)
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -mcpu=niagara3 -fvect-cost-model=very-cheap" CROSS_PREFIX="sparc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="./qemu/usr/bin/qemu-sparc64-static -cpu Sun-UltraSparc-T2,+vis3" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc big
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 little, simd altivec
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=ppc64-unknown-linux -fuse-ld=lld -mlittle-endian -m64 -mcpu=powerpc64le -maltivec" CROSS_RUNNER="qemu-ppc64le" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 little
+      run: CROSS_FLAGS="-static -DPERF_DEBUG --target=ppc64-unknown-linux -fuse-ld=lld -mlittle-endian -m64 -mcpu=powerpc64le -mno-altivec" CROSS_RUNNER="qemu-ppc64le" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 big, simd altivec
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -maltivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test powerpc64 big
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -m64 -mcpu=powerpc64 -mbig-endian -mno-altivec" CROSS_PREFIX="powerpc64-linux-gnu-" CC_NAME="gcc-14" CROSS_RUNNER="qemu-ppc64" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_TX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_TX_OPT _FEC_NO_RX_OPT 
+      run: CROSS_FLAGS="-DPERF_DEBUG -D_FEC_NO_TX_OPT -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test _FEC_NO_OPT 
+      run: CROSS_FLAGS="-DPERF_DEBUG -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_NO_TX_OPT
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -D_FEC_NO_TX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -D_FEC_NO_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian _FEC_RX_OPT
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -D_FEC_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_TX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_TX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_DO_ENDIAN_SWAP _FEC_NO_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_DO_ENDIAN_SWAP
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_DO_ENDIAN_SWAP _FEC_NO_OPT
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -DFEC_DO_ENDIAN_SWAP -D_FEC_NO_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER _FEC_NO_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_USER_GIVEN_BUFFER FEC_DO_ENDIAN_SWAP
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_USER_GIVEN_BUFFER -DFEC_DO_ENDIAN_SWAP -march=native -mtune=native" make clean fec_test
+    - name: test PERF_TX_BLOCK_SIZE clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -DPERF_TX_BLOCK_SIZE=256 -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test PERF_TX_BLOCK_SIZE avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -DPERF_TX_BLOCK_SIZE=256 -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test PERF_RX_BLOCK_SIZE clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test PERF_RX_BLOCK_SIZE avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test big endian PERF_RX_BLOCK_SIZE PERF_TX_BLOCK_SIZE
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -DPERF_RX_BLOCK_SIZE=256 -DPERF_TX_BLOCK_SIZE=256 --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    
+    - name: test FEC_MIN_MEM
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native" make clean fec_test
+    - name: test FEC_MIN_MEM clmul
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native -mpclmul" make clean fec_test
+    - name: test FEC_MIN_MEM avx2
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -march=native -mtune=native -mno-pclmul -mavx2" make clean fec_test
+    - name: test FEC_MIN_MEM _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test big endian FEC_MIN_MEM _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -DFEC_MIN_MEM -D_FEC_NO_RX_OPT --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM PERF_RX_BLOCK_SIZE
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native" make clean fec_test
+    - name: test big endian FEC_MIN_MEM PERF_RX_BLOCK_SIZE
+      run: CROSS_FLAGS="-static -DPERF_DEBUG -DFEC_MIN_MEM -DPERF_RX_BLOCK_SIZE=256 --target=powerpc-unknown-linux -fuse-ld=lld -mbig-endian -m32 -mcpu=powerpc --sysroot=/usr/powerpc-linux-gnu" CROSS_RUNNER="qemu-ppc" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -march=native -mtune=native" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER _FEC_NO_RX_OPT
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -D_FEC_NO_RX_OPT -march=native -mtune=native" TEST_PARAMS="1000 200 500" make clean fec_test
+    - name: test FEC_MIN_MEM FEC_USER_GIVEN_BUFFER PERF_RX_BLOCK_SIZE
+      run: CROSS_FLAGS="-DPERF_DEBUG -DFEC_MIN_MEM -DFEC_USER_GIVEN_BUFFER -DPERF_RX_BLOCK_SIZE=256 -march=native -mtune=native" make clean fec_test
+    

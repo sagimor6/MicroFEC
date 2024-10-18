@@ -27,7 +27,12 @@
 
 #define CALC_EXTRA_FOR_ALIGNED_MALLOC(typ) (__alignof__(typ) > __alignof__(max_align_t) ? __alignof__(typ) - __alignof__(max_align_t) : 0)
 
+#if defined(__sparc__) && (defined(FEC_HAS_CLMUL32) || defined(FEC_HAS_CLMUL64))
+// there is a bug in sparc gcc the xmulx builtin doesn't work with immediates if compiled with O1 for some reason
+static const volatile uint64_t POLY_G = 0b0000000000101011;
+#else
 #define POLY_G ((fec_int_t)0b0000000000101011)
+#endif
 
 #if defined(FEC_HAS_64_INT_VEC) || defined (FEC_HAS_CLMUL32)
 
@@ -53,6 +58,10 @@ typedef uint64_t  u64x1 __attribute__ ((vector_size (8)));
 #include <immintrin.h>
 #elif defined(__arm__) || defined(__aarch64__)
 #include <arm_neon.h>
+#elif defined(__riscv)
+#if (__GNUC__ >= 14) || (__clang_major__ >= 18)
+#include <riscv_bitmanip.h>
+#endif
 #endif
 
 #if defined(__AVX2__)
