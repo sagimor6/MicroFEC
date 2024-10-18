@@ -21,45 +21,44 @@ OPT_CFLAGS += -flto -fuse-linker-plugin -ffat-lto-objects -flto=auto -flto-parti
 OPT_CFLAGS += -falign-loops=32
 OPT_LDFLAGS += -Wl,--gc-sections
 
-#ARCH_CFLAGS += -march=native
 
-check_option = $(shell echo | $(CC) $(ARCH_CFLAGS) -v -E - 2>&1 >/dev/null | grep -E -e '\s$(1)\s')
+check_option = $(shell echo | $(CC) $(CROSS_FLAGS) -v -E - 2>&1 >/dev/null | grep -E -e '\s$(1)\s')
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-march=skylake),$(call check_option,-march=skylake-avx512),$(call check_option,-march=cascadelake))
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-mtune=skylake),$(call check_option,-mtune=skylake-avx512),$(call check_option,-mtune=cascadelake))
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-target-cpu skylake),$(call check_option,-target-cpu skylake-avx512),$(call check_option,-target-cpu cascadelake))
 has_jcc_erratum := $(or $(has_jcc_erratum),$(call check_option,-tune-cpu skylake),$(call check_option,-tune-cpu skylake-avx512),$(call check_option,-tune-cpu cascadelake))
 jcc_erratum_cflags = -mbranches-within-32B-boundaries -Wa,-mbranches-within-32B-boundaries
 ifneq ($(has_jcc_erratum),)
-ARCH_CFLAGS += $(foreach cflag,$(jcc_erratum_cflags),$(call check_cc_flag,$(cflag)))
+CROSS_FLAGS += $(foreach cflag,$(jcc_erratum_cflags),$(call check_cc_flag,$(cflag)))
 endif
 
 # CFLAGS += -DPERF_DEBUG
 
 # 32bit:
-# ARCH_CFLAGS += -m32
+# CROSS_FLAGS += -m32
 
 # pclmul:
-# ARCH_CFLAGS += -mpclmul
+# CROSS_FLAGS += -mpclmul
 # avx2:
-# ARCH_CFLAGS += -mno-pclmul -mavx2
+# CROSS_FLAGS += -mno-pclmul -mavx2
 # avx:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mavx
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mavx
 # sse2:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -msse2
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mno-avx -msse2
 # sse:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -msse
 # mmx:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mmmx
 # 64bit:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx
 # 32bit:
-# ARCH_CFLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx -m32
+# CROSS_FLAGS += -mno-pclmul -mno-avx2 -mno-avx -mno-sse4.2 -mno-sse4.1 -mno-sse4 -mno-sse3 -mno-sse2 -mno-sse -mno-mmx -m32
 
 # aarch64 clmul:
-# ARCH_CFLAGS += -march=armv8-a+crypto
+# CROSS_FLAGS += -march=armv8-a+crypto
 
 # arm clmul:
-# ARCH_CFLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
+# CROSS_FLAGS += -march=armv8-a+crypto -mfpu=crypto-neon-fp-armv8
 
 
 
@@ -69,8 +68,6 @@ endif
 OPT_CFLAGS := $(foreach cflag,$(OPT_CFLAGS),$(call check_cc_flag,$(cflag)))
 CFLAGS := $(foreach cflag,$(CFLAGS),$(call check_cc_flag,$(cflag)))
 OPT_LDFLAGS := $(foreach cflag,$(OPT_LDFLAGS),$(call check_cc_flag,$(cflag)))
-
-CFLAGS += $(ARCH_CFLAGS)
 
 TEST_PARAMS ?= 10000 2000 500
 
