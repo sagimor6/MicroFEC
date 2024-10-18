@@ -20,7 +20,7 @@ jobs:
     - name: compilers
       run: sudo apt-get install clang lld gcc-multilib-x86-64-linux-gnux32 qemu-user libgcc-12-dev-arm64-cross libc6-dev-arm64-cross gcc-12-arm-linux-gnueabihf gcc-12-riscv64-linux-gnu libc6-dev-powerpc-cross libgcc-12-dev-powerpc-cross libc6-dev-ppc64el-cross libgcc-12-dev-ppc64el-cross gcc-12-powerpc64-linux-gnu gcc-14-sparc64-linux-gnu
     - name: latest qemu
-      run: mkdir qemu && wget -O - https://archlinux.org/packages/extra/x86_64/qemu-user-static/download/ | tar -C qemu -x
+      run: mkdir qemu && wget -O - https://archlinux.org/packages/extra/x86_64/qemu-user-static/download/ | tar -C qemu --zstd -x
     - name: print cpu info
       run: cat /proc/cpuinfo && qemu-riscv64 --version
     - name: test native
