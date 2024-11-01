@@ -60,6 +60,7 @@ typedef struct {
     ((defined(__aarch64__) || defined(__arm__)) && __ARM_NEON) || \
     (defined(__mips__) && __mips_msa) || \
     (defined(__powerpc__) && __ALTIVEC__) || \
+    (defined(__loongarch__) && __loongarch_sx) || \
     (defined(__riscv) && __riscv_vector && __riscv_v_min_vlen >= 128/8 && __riscv_v_elen >= 32) /* TODO: check this */ || \
     0
 #define FEC_HAS_128_INT_VEC

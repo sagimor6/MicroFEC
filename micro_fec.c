@@ -418,7 +418,7 @@ static bool _fec_can_recover(const fec_rx_state_t *rx_state) {
 
 
 fec_status_t fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx) {
-    fec_int_t n = rx_state->n;
+    fec_idx_t n = rx_state->n;
 
     if (idx >= n + rx_state->k) {
         return FEC_STATUS_INVALID_PARAMS;
@@ -436,7 +436,7 @@ fec_status_t fec_rx_is_pak_needed(fec_rx_state_t *rx_state, fec_idx_t idx) {
 }
 
 fec_status_t fec_rx_add_pak(fec_rx_state_t *rx_state, void* pak, fec_idx_t idx) {
-    fec_int_t n = rx_state->n;
+    fec_idx_t n = rx_state->n;
     fec_status_t status;
 
     status = fec_rx_is_pak_needed(rx_state, idx);
